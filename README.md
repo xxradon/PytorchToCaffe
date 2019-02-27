@@ -9,7 +9,7 @@
 
 1. Converting a pytorch model to caffe model.
 2. Some convenient tools of manipulate caffemodel and prototxt quickly(like get or set weights of layers).
-3. Support pytorch version >= 0.2.(Have tested on 0.3,0.3.1, 0.4, 0.4.1)
+3. Support pytorch version >= 0.2.(Have tested on 0.3,0.3.1, 0.4, 0.4.1 ,1.0)
 4. Analysing a model, get the operations number(ops) in every layers.
 
 ### requirements
@@ -56,11 +56,30 @@ For example `python pytorch_analyser.py example/resnet_pytorch_analysis_example.
 The new version of pytorch_to_caffe supporting the newest version(from 0.2.0 to 0.4.1) of pytorch.
 NOTICE: The transfer output will be somewhat different with the original model, caused by implementation difference.
 
-- Supporting layers types: conv2d, linear, max_pool2d, avg_pool2d, dropout,
- relu, prelu, threshold(only value=0),softmax, batch_norm
+- Supporting layers types: 
+conv2d  ->  Convolution, 
+_conv_transpose2d ->  Deconvolution, 
+_linear -> InnerProduct, 
+_split  -> Slice, 
+max_pool2d,_avg_pool2d   -> Pooling,
+_max    -> Eltwise, 
+_cat    -> Concat,
+dropout -> Dropout,
+ relu   -> ReLU, 
+ prelu  -> PReLU, 
+ _leaky_relu -> ReLU,
+ _tanh  -> TanH,   
+ threshold(only value=0) -> Threshold,ReLU,
+ softmax -> Softmax, 
+ batch_norm -> BatchNorm,Scale, 
+ instance_norm -> BatchNorm,Scale,
+ 
 - Supporting operations: torch.split, torch.max, torch.cat
 - Supporting tensor Variable operations: var.view, + (add), += (iadd), -(sub), -=(isub)
  \* (mul) *= (imul)
+
+Need to be added for caffe in the future:
+- Upsample,Normalize,DepthwiseConv
 
 The supported above can transfer many kinds of nets, 
 such as AlexNet(tested), VGG(tested), ResNet(fixed the bug in origin repo which mainly caused by ReLu layer function.), Inception_V3(tested).
@@ -71,6 +90,14 @@ The supported layers concluded the most popular layers and operations.
 Example: please see file `example/alexnet_pytorch_to_caffe.py`. Just Run `python3 example/alexnet_pytorch_to_caffe.py`
 
 # Deploy verify
+After Converter,we should use verify_deploy.py to verify the output of pytorch model and the convertted caffe model.
+If you want to verify the outputs of caffe and pytorch,you should make caffe and pytorch install in the same environment,anaconda is recommended.
+using following script,we can install caffe-gpu(master branch). 
+```angular2html
+conda install caffe-gpu pytorch cudatoolkit=9.0 -c pytorch 
+
+```
+
 please see file `example/verify_deploy.py`,it can verify the output of pytorch model and the convertted caffe model in the same input.
 
 

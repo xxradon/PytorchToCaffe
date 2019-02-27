@@ -1,0 +1,13 @@
+
+\.idea/
+
+\.vscode/
+
+__pycache__/
+
+*.caffemodel
+
+*.prototxt
+
+*.pth
+

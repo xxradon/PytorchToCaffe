@@ -1,4 +1,5 @@
 syntax = "proto2";
+
 package caffe;
 
 // Specifies the shape (dimensions) of a Blob.
@@ -37,8 +38,10 @@ message Datum {
   repeated float float_data = 6;
   // If true data contains an encoded image that need to be decoded
   optional bool encoded = 7 [default = false];
+  repeated float labels = 8; 
 }
 
+// *******************add by xia for ssd******************
 // The label (display) name and label id.
 message LabelMapItem {
   // Both name and label are required.
@@ -153,6 +156,22 @@ message AnnotatedDatum {
   repeated AnnotationGroup annotation_group = 3;
 }
 
+// *******************add by xia for mtcnn******************
+message MTCNNBBox {
+  optional float xmin = 1;
+  optional float ymin = 2;
+  optional float xmax = 3;
+  optional float ymax = 4;
+}
+
+message MTCNNDatum {
+  optional Datum datum = 1;
+  //repeated MTCNNBBox rois = 2;
+  optional MTCNNBBox roi = 2;
+  repeated float pts = 3; 
+}
+//**************************************************************
+
 message FillerParameter {
   // The filler type.
   optional string type = 1 [default = 'constant'];
@@ -172,16 +191,18 @@ message FillerParameter {
     AVERAGE = 2;
   }
   optional VarianceNorm variance_norm = 8 [default = FAN_IN];
+  // added by me
+  optional string file = 9;
 }
 
 message NetParameter {
   optional string name = 1; // consider giving the network a name
-  // DEPRECATED. See InputParameter. The input blobs to the network.
+  // The input blobs to the network.
   repeated string input = 3;
-  // DEPRECATED. See InputParameter. The shape of the input blobs.
+  // The shape of the input blobs.
   repeated BlobShape input_shape = 8;
 
-  // 4D input dimensions -- deprecated.  Use "input_shape" instead.
+  // 4D input dimensions -- deprecated.  Use "shape" instead.
   // If specified, for each input blob there should be four
   // values specifying the num, channels, height and width of the input blob.
   // Thus, there should be a total of (4 * #input) numbers.
@@ -211,7 +232,7 @@ message NetParameter {
 // NOTE
 // Update the next available ID when you add a new SolverParameter field.
 //
-// SolverParameter next available ID: 44 (last added: plateau_winsize)
+// SolverParameter next available ID: 41 (last added: type)
 message SolverParameter {
   //////////////////////////////////////////////////////////////////////////////
   // Specifying the train and test networks
@@ -248,17 +269,6 @@ message SolverParameter {
   optional NetState train_state = 26;
   repeated NetState test_state = 27;
 
-  // Evaluation type.
-  optional string eval_type = 41 [default = "classification"];
-  // ap_version: different ways of computing Average Precision.
-  //    Check https://sanchom.wordpress.com/tag/average-precision/ for details.
-  //    11point: the 11-point interpolated average precision. Used in VOC2007.
-  //    MaxIntegral: maximally interpolated AP. Used in VOC2012/ILSVRC.
-  //    Integral: the natural integral of the precision-recall curve.
-  optional string ap_version = 42 [default = "Integral"];
-  // If true, display per class result.
-  optional bool show_per_class_result = 44 [default = false];
-
   // The number of iterations for each test net.
   repeated int32 test_iter = 3;
 
@@ -290,8 +300,6 @@ message SolverParameter {
   //      zero by the max_iter. return base_lr (1 - iter/max_iter) ^ (power)
   //    - sigmoid: the effective learning rate follows a sigmod decay
   //      return base_lr ( 1/(1 + exp(-gamma * (iter - stepsize))))
-  //    - plateau: decreases lr
-  //              if the minimum loss isn't updated for 'plateau_winsize' iters
   //
   // where base_lr, max_iter, gamma, step, stepvalue and power are defined
   // in the solver parameter protocol buffer, and iter is the current iteration.
@@ -307,8 +315,9 @@ message SolverParameter {
   optional int32 stepsize = 13;
   // the stepsize for learning rate policy "multistep"
   repeated int32 stepvalue = 34;
-  // the stepsize for learning rate policy "plateau"
-  repeated int32 plateau_winsize = 43;
+  // for rate policy "multifixed"
+  repeated float stagelr = 50;
+  repeated int32 stageiter = 51;
 
   // Set clip_gradients to >= 0 to clip parameter gradients to that L2 norm,
   // whenever their actual L2 norm is larger.
@@ -347,7 +356,7 @@ message SolverParameter {
 
   // RMSProp decay value
   // MeanSquare(t) = rms_decay*MeanSquare(t-1) + (1-rms_decay)*SquareGradient(t)
-  optional float rms_decay = 38 [default = 0.99];
+  optional float rms_decay = 38;
 
   // If true, print information about the state of the net that may help with
   // debugging learning problems.
@@ -375,8 +384,6 @@ message SolverState {
   optional string learned_net = 2; // The file that stores the learned net.
   repeated BlobProto history = 3; // The history for sgd solvers
   optional int32 current_step = 4 [default = 0]; // The current step for learning rate
-  optional float minimum_loss = 5 [default = 1E38]; // Historical minimum loss
-  optional int32 iter_last_event = 6 [default = 0]; // The iteration when last lr-update or min_loss-update happend
 }
 
 enum Phase {
@@ -408,6 +415,38 @@ message NetStateRule {
   repeated string not_stage = 5;
 }
 
+// added by Me
+message SpatialTransformerParameter {
+
+	// How to use the parameter passed by localisation network
+	optional string transform_type = 1 [default = "affine"];
+	// What is the sampling technique
+	optional string sampler_type = 2 [default = "bilinear"];
+
+	// If not set,stay same with the input dimension H and W
+	optional int32 output_H = 3;
+	optional int32 output_W = 4;
+
+	// If false, only compute dTheta, DO NOT compute dU
+	optional bool to_compute_dU = 5 [default = true];
+
+	// The default value for some parameters
+	optional double theta_1_1 = 6;
+	optional double theta_1_2 = 7;
+	optional double theta_1_3 = 8;
+	optional double theta_2_1 = 9;
+	optional double theta_2_2 = 10;
+	optional double theta_2_3 = 11;
+}
+
+// added by Me
+message STLossParameter {
+
+	// Indicate the resolution of the output images after ST transformation
+	required int32 output_H = 1;
+	required int32 output_W = 2;
+}
+
 // Specifies training parameters (multipliers on global learning constants,
 // and the name and other settings used for weight sharing).
 message ParamSpec {
@@ -436,7 +475,8 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 147 (last added: recurrent_param)
+// LayerParameter next available layer-specific ID: 143 (last added: scale_param)
+
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -458,12 +498,7 @@ message LayerParameter {
   // The blobs containing the numeric parameters of the layer.
   repeated BlobProto blobs = 7;
 
-  // Specifies whether to backpropagate to each bottom. If unspecified,
-  // Caffe will automatically infer whether each input needs backpropagation
-  // to compute parameter gradients. If set to true for some inputs,
-  // backpropagation to those inputs is forced; if set false for some inputs,
-  // backpropagation to those inputs is skipped.
-  //
+  // Specifies on which bottoms the backpropagation should be skipped.
   // The size must be either 0 or equal to the number of bottoms.
   repeated bool propagate_down = 11;
 
@@ -482,6 +517,15 @@ message LayerParameter {
   // Parameters shared by loss layers.
   optional LossParameter loss_param = 101;
 
+
+  // Yolo detection loss layer
+  optional DetectionLossParameter detection_loss_param = 200;
+  // Yolo detection evaluation layer
+  optional EvalDetectionParameter eval_detection_param = 201;
+  // Yolo 9000
+  optional RegionLossParameter region_loss_param = 202;
+  optional ReorgParameter reorg_param = 203;
+
   // Layer type-specific parameters.
   //
   // Note: certain layers may have more than one computational engine
@@ -489,17 +533,13 @@ message LayerParameter {
   // engine parameter for selecting the implementation.
   // The default for the engine is set by the ENGINE switch at compile-time.
   optional AccuracyParameter accuracy_param = 102;
-  optional AnnotatedDataParameter annotated_data_param = 200;
   optional ArgMaxParameter argmax_param = 103;
   optional BatchNormParameter batch_norm_param = 139;
   optional BiasParameter bias_param = 141;
   optional ConcatParameter concat_param = 104;
   optional ContrastiveLossParameter contrastive_loss_param = 105;
   optional ConvolutionParameter convolution_param = 106;
-  optional CropParameter crop_param = 144;
   optional DataParameter data_param = 107;
-  optional DetectionEvaluateParameter detection_evaluate_param = 205;
-  optional DetectionOutputParameter detection_output_param = 204;
   optional DropoutParameter dropout_param = 108;
   optional DummyDataParameter dummy_data_param = 109;
   optional EltwiseParameter eltwise_param = 110;
@@ -517,57 +557,206 @@ message LayerParameter {
   optional LogParameter log_param = 134;
   optional LRNParameter lrn_param = 118;
   optional MemoryDataParameter memory_data_param = 119;
-  optional MultiBoxLossParameter multibox_loss_param = 201;
   optional MVNParameter mvn_param = 120;
-  optional NormalizeParameter norm_param = 206;
-  optional ParameterParameter parameter_param = 145;
-  optional PermuteParameter permute_param = 202;
   optional PoolingParameter pooling_param = 121;
   optional PowerParameter power_param = 122;
   optional PReLUParameter prelu_param = 131;
-  optional PriorBoxParameter prior_box_param = 203;
   optional PythonParameter python_param = 130;
   optional RecurrentParameter recurrent_param = 146;
   optional ReductionParameter reduction_param = 136;
   optional ReLUParameter relu_param = 123;
   optional ReshapeParameter reshape_param = 133;
+  optional ROIPoolingParameter roi_pooling_param = 8266711; //roi pooling
   optional ScaleParameter scale_param = 142;
   optional SigmoidParameter sigmoid_param = 124;
+  optional SmoothL1LossParameter smooth_l1_loss_param = 8266712;
   optional SoftmaxParameter softmax_param = 125;
   optional SPPParameter spp_param = 132;
   optional SliceParameter slice_param = 126;
   optional TanHParameter tanh_param = 127;
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
-  optional VideoDataParameter video_data_param = 207;
   optional WindowDataParameter window_data_param = 129;
-  //use for RFCN
-  optional BoxAnnotatorOHEMParameter box_annotator_ohem_param = 10000;
-  optional PSROIPoolingParameter psroi_pooling_param = 10001;
-  //use for faster-RCNN
-  optional ROIPoolingParameter roi_pooling_param = 8266711;
-}
-//use for faster-RCNN
-message ROIPoolingParameter {
-  // Pad, kernel size, and stride are all given as a single value for equal
-  // dimensions in height and width or as Y, X pairs.
-  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
-  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
-  // Multiplicative spatial scale factor to translate ROI coords from their
-  // input scale to the scale used when pooling
-  optional float spatial_scale = 3 [default = 1];
+
+  // added by Me
+  optional SpatialTransformerParameter st_param = 148;
+  optional STLossParameter st_loss_param = 145;
+  //***************add by xia**************************
+  optional RPNParameter rpn_param = 150;                  //  rpn
+  optional FocalLossParameter focal_loss_param = 155;  // Focal Loss layer
+
+  optional AsdnDataParameter asdn_data_param = 159; //asdn
+
+  optional BNParameter bn_param = 160;  //bn
+  optional MTCNNDataParameter mtcnn_data_param = 161; //mtcnn
+
+  optional InterpParameter interp_param = 162;  //Interp
+  
+  optional PSROIPoolingParameter psroi_pooling_param = 163; //rfcn
+
+  //**************************ssd*******************************************
+  optional AnnotatedDataParameter annotated_data_param = 164; //ssd
+  optional PriorBoxParameter prior_box_param = 165;
+  optional CropParameter crop_param = 167;
+  optional DetectionEvaluateParameter detection_evaluate_param = 168;
+  optional DetectionOutputParameter detection_output_param = 169;
+  //optional NormalizeParameter normalize_param = 170;
+  optional MultiBoxLossParameter multibox_loss_param = 171;
+  optional PermuteParameter permute_param = 172;
+  optional VideoDataParameter video_data_param = 173;
+
+  //*************************a softmax loss***********************************
+  optional MarginInnerProductParameter margin_inner_product_param = 174;
+
+  //*************************center loss***********************************
+  optional CenterLossParameter center_loss_param = 175;
+
+  //*************************deformabel conv***********************************
+  optional DeformableConvolutionParameter deformable_convolution_param = 176;
+
+  //***************Additive Margin Softmax for Face Verification***************
+  optional LabelSpecificAddParameter label_specific_add_param = 177;
+
+  optional AdditiveMarginInnerProductParameter additive_margin_inner_product_param = 178;
+  optional CosinAddmParameter cosin_add_m_param = 179;
+  optional CosinMulmParameter cosin_mul_m_param = 180;
+  optional ChannelScaleParameter channel_scale_param = 181;
+  optional FlipParameter flip_param = 182;
+  optional TripletLossParameter triplet_loss_param = 183;
+  optional CoupledClusterLossParameter coupled_cluster_loss_param = 184;
+  optional GeneralTripletParameter general_triplet_loss_param = 185;
+
+  optional ROIAlignParameter roi_align_param = 186;
+
+  //**************add by wdd***************
+  optional UpsampleParameter  upsample_param = 100003;
+  optional MatMulParameter matmul_param = 100005;
+  optional PassThroughParameter pass_through_param = 100004;
+  optional NormalizeParameter norm_param = 100001;
 }
 
-//use for RFCN
+//*********************add by wdd******************
+message UpsampleParameter {
+  optional uint32 scale = 1 [default = 2];
+  optional uint32 scale_h = 2;
+  optional uint32 scale_w = 3;
+  optional bool pad_out_h = 4 [default = false];
+  optional bool pad_out_w = 5 [default = false];
+  optional uint32 upsample_h = 6;
+  optional uint32 upsample_w = 7;
+}
+
+message MatMulParameter {
+  optional uint32 dim_1 = 1;//row of input matrix one
+  optional uint32 dim_2 = 2;//column of input matrix one and row of input matrix two
+  optional uint32 dim_3 = 3;//column of input matrix two
+}
+
+message PassThroughParameter {
+  optional uint32 num_output = 1 [default = 0];
+  optional uint32 block_height = 2 [default = 0];
+  optional uint32 block_width = 3 [default = 0];
+}
+
+message NormalizeParameter{
+optional bool across_spatial = 1 [default = true];
+optional FillerParameter scale_filler = 2;
+optional bool channel_shared = 3 [default = true];
+optional float eps = 4 [default = 1e-10];
+optional float sqrt_a = 5 [default = 1];
+}
+
+
+
+//*******************add by xia****ssd data*********
+message AnnotatedDataParameter {
+  // Define the sampler.
+  repeated BatchSampler batch_sampler = 1;
+  // Store label name and label id in LabelMap format.
+  optional string label_map_file = 2;
+  // If provided, it will replace the AnnotationType stored in each
+  // AnnotatedDatum.
+  optional AnnotatedDatum.AnnotationType anno_type = 3;
+}
+
+//*******************add by xia****asdn data*********
+message AsdnDataParameter{
+  optional int32 count_drop = 1 [default = 15];
+  optional int32 permute_count = 2 [default = 20];
+  optional int32 count_drop_neg = 3 [default = 0];
+  optional int32 channels = 4 [default = 1024];
+  optional int32 iter_size = 5 [default = 2];
+  optional int32 maintain_before = 6 [default = 1];
+}
+
+//*******************add by xia****mtcnn*********
+message MTCNNDataParameter{
+  optional bool augmented = 1 [default = true];
+  optional bool flip = 2 [default = true];
+
+  // -1 means batch_size
+  optional int32 num_positive = 3 [default = -1];
+  optional int32 num_negitive = 4 [default = -1];
+  optional int32 num_part = 5 [default = -1];
+  optional uint32 resize_width = 6 [default = 0];
+  optional uint32 resize_height = 7 [default = 0];
+  optional float min_negitive_scale = 8 [default = 0.5];
+  optional float max_negitive_scale = 9 [default = 1.5];
+}
+
+//***************add by xia******InterpLayer*********
+message InterpParameter {
+  optional int32 height = 1 [default = 0]; // Height of output
+  optional int32 width = 2 [default = 0]; // Width of output
+  optional int32 zoom_factor = 3 [default = 1]; // zoom factor
+  optional int32 shrink_factor = 4 [default = 1]; // shrink factor
+  optional int32 pad_beg = 5 [default = 0]; // padding at begin of input
+  optional int32 pad_end = 6 [default = 0]; // padding at end of input
+}
+//*******************add by xia******rfcn********************************
+
 message PSROIPoolingParameter {
-  required float spatial_scale = 1;
-  required int32 output_dim = 2; // output channel number
-  required int32 group_size = 3; // equal to pooled_size
+   required float spatial_scale = 1; 
+   required int32 output_dim = 2; // output channel number
+   required int32 group_size = 3; // number of groups to encode position-sensitive score maps
 }
-message BoxAnnotatorOHEMParameter {
-  required uint32 roi_per_img = 1; // number of rois for training
-  optional int32 ignore_label = 2 [default = -1]; // ignore_label in scoring
+//***************************************************
+message FlipParameter {
+  optional bool flip_width = 1 [default = true];
+  optional bool flip_height = 2 [default = false];
 }
+
+message BNParameter {
+  optional FillerParameter slope_filler = 1;
+  optional FillerParameter bias_filler = 2;
+  optional float momentum = 3 [default = 0.9];
+  optional float eps = 4 [default = 1e-5];
+  // If true, will use the moving average mean and std for training and test.
+  // Will override the lr_param and freeze all the parameters.
+  // Make sure to initialize the layer properly with pretrained parameters.
+  optional bool frozen = 5 [default = false];
+  enum Engine {
+    DEFAULT = 0;
+    CAFFE = 1;
+    CUDNN = 2;
+  }
+  optional Engine engine = 6 [default = DEFAULT];
+}
+
+//************************add by xia*******************************
+// Focal Loss for Dense Object Detection
+message FocalLossParameter {
+  enum Type {
+    ORIGIN = 0; // FL(p_t)  = -(1 - p_t) ^ gama * log(p_t), where p_t = p if y == 1 else 1 - p, whre p = sigmoid(x)
+    LINEAR = 1; // FL*(p_t) = -log(p_t) / gama, where p_t = sigmoid(gama * x_t + beta), where x_t = x * y, y is the ground truth label {-1, 1}
+  }
+  optional Type type   = 1 [default = ORIGIN]; 
+  optional float gamma = 2 [default = 2];
+  // cross-categories weights to solve the imbalance problem
+  optional float alpha = 3 [default = 0.25]; 
+  optional float beta  = 4 [default = 1.0];
+}
+//**************************FocalLoss****************************************
 
 // Message that stores parameters used to apply transformation
 // to the data layer's data
@@ -593,6 +782,7 @@ message TransformationParameter {
   optional bool force_color = 6 [default = false];
   // Force the decoded image to have 1 color channels.
   optional bool force_gray = 7 [default = false];
+
   // Resize policy
   optional ResizeParameter resize_param = 8;
   // Noise policy
@@ -605,6 +795,7 @@ message TransformationParameter {
   optional EmitConstraint emit_constraint = 10;
 }
 
+//*******************add by xia****ssd******************************************************
 // Message that stores parameters used by data transformer for resize policy
 message ResizeParameter {
   //Probability of using this resize policy
@@ -730,35 +921,33 @@ message ExpansionParameter {
   optional float max_expand_ratio = 2 [default = 1.];
 }
 
+//**************************************************************************************************
+
 // Message that stores parameters shared by loss layers
 message LossParameter {
   // If specified, ignore instances with the given label.
   optional int32 ignore_label = 1;
   // How to normalize the loss for loss layers that aggregate across batches,
   // spatial dimensions, or other dimensions.  Currently only implemented in
-  // SoftmaxWithLoss and SigmoidCrossEntropyLoss layers.
+  // SoftmaxWithLoss layer.
   enum NormalizationMode {
     // Divide by the number of examples in the batch times spatial dimensions.
     // Outputs that receive the ignore label will NOT be ignored in computing
     // the normalization factor.
     FULL = 0;
-    // Divide by the total number of output locations that do not take the
+    // Divide by the total number of output locations that do not take the 
     // ignore_label.  If ignore_label is not set, this behaves like FULL.
     VALID = 1;
     // Divide by the batch size.
     BATCH_SIZE = 2;
     // Do not normalize the loss.
-    PRE_FIXED = 3;
-    NONE = 4;
+    NONE = 3;
   }
-  // For historical reasons, the default normalization for
-  // SigmoidCrossEntropyLoss is BATCH_SIZE and *not* VALID.
   optional NormalizationMode normalization = 3 [default = VALID];
   // Deprecated.  Ignored if normalization is specified.  If normalization
   // is not specified, then setting this to false will be equivalent to
   // normalization = BATCH_SIZE to be consistent with previous behavior.
   optional bool normalize = 2;
-  optional float pre_fixed_normalizer = 4 [default = 1];
 }
 
 // Messages that store parameters used by individual layer types follow, in
@@ -779,16 +968,6 @@ message AccuracyParameter {
 
   // If specified, ignore instances with the given label.
   optional int32 ignore_label = 3;
-}
-
-message AnnotatedDataParameter {
-  // Define the sampler.
-  repeated BatchSampler batch_sampler = 1;
-  // Store label name and label id in LabelMap format.
-  optional string label_map_file = 2;
-  // If provided, it will replace the AnnotationType stored in each
-  // AnnotatedDatum.
-  optional AnnotatedDatum.AnnotationType anno_type = 3;
 }
 
 message ArgMaxParameter {
@@ -869,6 +1048,66 @@ message ContrastiveLossParameter {
   optional bool legacy_version = 2 [default = false];
 }
 
+message DetectionLossParameter {
+  // Yolo detection loss layer
+  optional uint32 side = 1 [default = 7];
+  optional uint32 num_class = 2 [default = 20];
+  optional uint32 num_object = 3 [default = 2];
+  optional float object_scale = 4 [default = 1.0];
+  optional float noobject_scale = 5 [default = 0.5];
+  optional float class_scale = 6 [default = 1.0];
+  optional float coord_scale = 7 [default = 5.0];
+  optional bool sqrt = 8 [default = true];
+  optional bool constriant = 9 [default = false];
+}
+
+message RegionLossParameter{
+  //Yolo 9000
+  optional uint32 side = 1 [default = 13];
+  optional uint32 num_class = 2 [default = 20];
+  optional uint32 bias_match = 3 [default = 1];
+  optional uint32 coords = 4 [default = 4];
+  optional uint32 num = 5 [default = 5];
+  optional uint32 softmax = 6 [default = 1];
+  optional float jitter = 7 [default = 0.2];
+  optional uint32 rescore = 8 [default = 1];
+  
+  optional float object_scale = 9 [default = 1.0];
+  optional float class_scale = 10 [default = 1.0];
+  optional float noobject_scale = 11 [default = 0.5];
+  optional float coord_scale = 12 [default = 5.0];
+  optional uint32 absolute = 13 [default = 1];
+  optional float thresh = 14 [default = 0.2];
+  optional uint32 random = 15 [default = 1];
+  repeated float biases = 16;
+  optional string softmax_tree = 17;
+  optional string class_map = 18;
+}
+
+message ReorgParameter {
+  optional uint32 stride = 1;
+  optional bool reverse = 2 [default = false];
+}
+
+message EvalDetectionParameter {
+  enum ScoreType {
+    OBJ = 0;
+    PROB = 1;
+    MULTIPLY = 2;
+  }
+  // Yolo detection evaluation layer
+  optional uint32 side = 1 [default = 7];
+  optional uint32 num_class = 2 [default = 20];
+  optional uint32 num_object = 3 [default = 2];
+  optional float threshold = 4 [default = 0.5];
+  optional bool sqrt = 5 [default = true];
+  optional bool constriant = 6 [default = true];
+  optional ScoreType score_type = 7 [default = MULTIPLY];
+  optional float nms = 8 [default = -1];
+  repeated float biases = 9;
+}
+
+
 message ConvolutionParameter {
   optional uint32 num_output = 1; // The number of outputs for the layer
   optional bool bias_term = 2 [default = true]; // whether to have bias terms
@@ -940,6 +1179,7 @@ message CropParameter {
   repeated uint32 offset = 2;
 }
 
+
 message DataParameter {
   enum DB {
     LEVELDB = 0;
@@ -972,7 +1212,11 @@ message DataParameter {
   // Prefetch queue (Number of batches to prefetch to host memory, increase if
   // data access bandwidth varies).
   optional uint32 prefetch = 10 [default = 4];
+  
+  repeated uint32 side = 11;
 }
+
+//**********************************ssd*******************************************
 
 // Message that store parameters used by DetectionEvaluateLayer
 message DetectionEvaluateParameter {
@@ -1031,6 +1275,7 @@ message SaveOutputParameter {
   optional ResizeParameter resize_param = 7;
 }
 
+
 // Message that store parameters used by DetectionOutputLayer
 message DetectionOutputParameter {
   // Number of classes to be predicted. Required!
@@ -1062,9 +1307,11 @@ message DetectionOutputParameter {
   // If provided, save outputs to video file.
   optional string save_file = 12;
 }
+//*******************************************************************************
 
 message DropoutParameter {
   optional float dropout_ratio = 1 [default = 0.5]; // dropout ratio
+  optional bool scale_train = 2 [default = true];  // scale train or test phase
 }
 
 // DummyDataLayer fills any number of arbitrarily shaped blobs with random
@@ -1103,7 +1350,7 @@ message EltwiseParameter {
 // Message that stores parameters used by ELULayer
 message ELUParameter {
   // Described in:
-  // Clevert, D.-A., Unterthiner, T., & Hochreiter, S. (2015). Fast and Accurate
+  // Clevert, D.-A., Unterthiner, T., & Hochreiter, S. (2015). Fast and Accurate 
   // Deep Network Learning by Exponential Linear Units (ELUs). arXiv
   optional float alpha = 1 [default = 1];
 }
@@ -1223,6 +1470,7 @@ message InnerProductParameter {
   // of the weight matrix. The weight matrix itself is not going to be transposed
   // but rather the transfer flag of operations will be toggled accordingly.
   optional bool transpose = 6 [default = false];
+  optional bool normalize = 7 [default = false];
 }
 
 message InputParameter {
@@ -1232,6 +1480,7 @@ message InputParameter {
   // Define no shape to defer to reshaping manually.
   repeated BlobShape shape = 1;
 }
+
 
 // Message that stores parameters used by LogLayer
 message LogParameter {
@@ -1268,6 +1517,7 @@ message MemoryDataParameter {
   optional uint32 height = 3;
   optional uint32 width = 4;
 }
+//**************************ssd********************************************
 
 // Message that store parameters used by MultiBoxLossLayer
 message MultiBoxLossParameter {
@@ -1341,6 +1591,29 @@ message MultiBoxLossParameter {
   optional bool use_prior_for_nms = 23 [default = false];
 }
 
+// Message that stores parameters used by NormalizeLayer
+//message NormalizeParameter {
+//  //optional bool across_spatial = 1 [default = true];
+//  // Initial value of scale. Default is 1.0 for all
+//  //optional FillerParameter scale_filler = 2;
+//  // Whether or not scale parameters are shared across channels.
+//  //optional bool channel_shared = 3 [default = true];
+//  // Epsilon for not dividing by zero while normalizing variance
+//  //optional float eps = 4 [default = 1e-10];
+//  //**************************************************
+//  optional string normalize_type = 1 [default = "L2"];
+//  optional bool fix_gradient = 2 [default = false];
+//  optional bool bp_norm = 3 [default = false];
+//}
+
+message PermuteParameter {
+  // The new orders of the axes of data. Notice it should be with
+  // in the same range as the input data, and it starts from 0.
+  // Do not provide repeated order.
+  repeated uint32 order = 1;
+}
+//**************************end***********************************************
+
 message MVNParameter {
   // This parameter can be set to false to normalize mean only
   optional bool normalize_variance = 1 [default = true];
@@ -1352,27 +1625,10 @@ message MVNParameter {
   optional float eps = 3 [default = 1e-9];
 }
 
-// Message that stores parameters used by NormalizeLayer
-message NormalizeParameter {
-  optional bool across_spatial = 1 [default = true];
-  // Initial value of scale. Default is 1.0 for all
-  optional FillerParameter scale_filler = 2;
-  // Whether or not scale parameters are shared across channels.
-  optional bool channel_shared = 3 [default = true];
-  // Epsilon for not dividing by zero while normalizing variance
-  optional float eps = 4 [default = 1e-10];
-}
-
 message ParameterParameter {
   optional BlobShape shape = 1;
 }
 
-message PermuteParameter {
-  // The new orders of the axes of data. Notice it should be with
-  // in the same range as the input data, and it starts from 0.
-  // Do not provide repeated order.
-  repeated uint32 order = 1;
-}
 
 message PoolingParameter {
   enum PoolMethod {
@@ -1401,13 +1657,11 @@ message PoolingParameter {
   // If global_pooling then it will pool over the size of the bottom by doing
   // kernel_h = bottom->height and kernel_w = bottom->width
   optional bool global_pooling = 12 [default = false];
-  // How to calculate the output size - using ceil (default) or floor rounding.
-  enum RoundMode {
-    CEIL = 0;
-    FLOOR = 1;
-  }
-  optional RoundMode round_mode = 13 [default = FLOOR];
-  //optional RoundMode round_mode = 13 [default = CEIL];
+
+  ///////////////////////
+  // Specify floor/ceil mode
+  optional bool ceil_mode = 13 [default = true];
+  ///////////////////////////////
 }
 
 message PowerParameter {
@@ -1417,6 +1671,7 @@ message PowerParameter {
   optional float shift = 3 [default = 0.0];
 }
 
+//*************ssd********************************************************************
 // Message that store parameters used by PriorBoxLayer
 message PriorBoxParameter {
   // Encode/decode type.
@@ -1458,7 +1713,7 @@ message PriorBoxParameter {
   // Offset to the top left corner of each cell.
   optional float offset = 13 [default = 0.5];
 }
-
+//*********************************************************************************
 message PythonParameter {
   optional string module = 1;
   optional string layer = 2;
@@ -1473,24 +1728,24 @@ message PythonParameter {
   optional bool share_in_parallel = 4 [default = false];
 }
 
-// Message that stores parameters used by RecurrentLayer
 message RecurrentParameter {
   // The dimension of the output (and usually hidden state) representation --
   // must be explicitly set to non-zero.
   optional uint32 num_output = 1 [default = 0];
-
+  
   optional FillerParameter weight_filler = 2; // The filler for the weight
   optional FillerParameter bias_filler = 3; // The filler for the bias
-
+  
   // Whether to enable displaying debug_info in the unrolled recurrent net.
   optional bool debug_info = 4 [default = false];
-
+  
   // Whether to add as additional inputs (bottoms) the initial hidden state
   // blobs, and add as additional outputs (tops) the final timestep hidden state
   // blobs.  The number of additional bottom/top blobs required depends on the
   // recurrent architecture -- e.g., 1 for RNNs, 2 for LSTMs.
   optional bool expose_hidden = 5 [default = false];
 }
+
 
 // Message that stores parameters used by ReductionLayer
 message ReductionParameter {
@@ -1556,7 +1811,7 @@ message ReshapeParameter {
   //   reshape_param { shape { dim:  2  dim: 2  dim:  4 } }
   //   reshape_param { shape { dim:  0  dim: 2  dim:  4 } }
   //   reshape_param { shape { dim:  0  dim: 2  dim: -1 } }
-  //   reshape_param { shape { dim:  0  dim:-1  dim:  4 } }
+  //   reshape_param { shape { dim: -1  dim: 0  dim:  2 } }
   //
   optional BlobShape shape = 1;
 
@@ -1601,6 +1856,17 @@ message ReshapeParameter {
   optional int32 num_axes = 3 [default = -1];
 }
 
+// Message that stores parameters used by ROIPoolingLayer
+message ROIPoolingParameter {
+  // Pad, kernel size, and stride are all given as a single value for equal
+  // dimensions in height and width or as Y, X pairs.
+  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
+  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
+  // Multiplicative spatial scale factor to translate ROI coords from their
+  // input scale to the scale used when pooling
+  optional float spatial_scale = 3 [default = 1];
+}
+
 message ScaleParameter {
   // The first axis of bottom[0] (the first input Blob) along which to apply
   // bottom[1] (the second input Blob).  May be negative to index from the end
@@ -1636,6 +1902,8 @@ message ScaleParameter {
   // may be more efficient).  Initialized with bias_filler (defaults to 0).
   optional bool bias_term = 4 [default = false];
   optional FillerParameter bias_filler = 5;
+  optional float min_value = 6;
+  optional float max_value = 7;
 }
 
 message SigmoidParameter {
@@ -1645,6 +1913,13 @@ message SigmoidParameter {
     CUDNN = 2;
   }
   optional Engine engine = 1 [default = DEFAULT];
+}
+
+message SmoothL1LossParameter {
+  // SmoothL1Loss(x) =
+  //   0.5 * (sigma * x) ** 2    -- if x < 1.0 / sigma / sigma
+  //   |x| - 0.5 / sigma / sigma -- otherwise
+  optional float sigma = 1 [default = 1];
 }
 
 message SliceParameter {
@@ -1694,18 +1969,6 @@ message TileParameter {
 // Message that stores parameters used by ThresholdLayer
 message ThresholdParameter {
   optional float threshold = 1 [default = 0]; // Strictly positive values
-}
-
-message VideoDataParameter{
-  enum VideoType {
-    WEBCAM = 0;
-    VIDEO = 1;
-  }
-  optional VideoType video_type = 1 [default = WEBCAM];
-  optional int32 device_id = 2 [default = 0];
-  optional string video_file = 3;
-  // Number of frames to be skipped before processing a frame.
-  optional uint32 skip_frames = 4 [default = 0];
 }
 
 message WindowDataParameter {
@@ -1847,6 +2110,8 @@ message V1LayerParameter {
   optional WindowDataParameter window_data_param = 20;
   optional TransformationParameter transform_param = 36;
   optional LossParameter loss_param = 42;
+  optional DetectionLossParameter detection_loss_param = 200;
+  optional EvalDetectionParameter eval_detection_param = 201;
   optional V0LayerParameter layer = 1;
 }
 
@@ -1953,3 +2218,151 @@ message PReLUParameter {
   // Whether or not slope paramters are shared across channels.
   optional bool channel_shared = 2 [default = false];
 }
+
+
+//********add by xia****************
+message RPNParameter {
+  optional uint32 feat_stride = 1;
+  optional uint32 basesize = 2;
+  repeated uint32 scale = 3;
+  repeated float ratio = 4;
+  optional uint32 boxminsize =5;
+  optional uint32 per_nms_topn = 9;
+  optional uint32 post_nms_topn = 11;
+  optional float nms_thresh = 8;
+}
+
+message VideoDataParameter{
+  enum VideoType {
+    WEBCAM = 0;
+    VIDEO = 1;
+  }
+  optional VideoType video_type = 1 [default = WEBCAM];
+  optional int32 device_id = 2 [default = 0];
+  optional string video_file = 3;
+  // Number of frames to be skipped before processing a frame.
+  optional uint32 skip_frames = 4 [default = 0];
+}
+
+message CenterLossParameter {
+  optional uint32 num_output = 1; // The number of outputs for the layer
+  optional FillerParameter center_filler = 2; // The filler for the centers
+  // The first axis to be lumped into a single inner product computation;
+  // all preceding axes are retained in the output.
+  // May be negative to index from the end (e.g., -1 for the last axis).
+  optional int32 axis = 3 [default = 1];
+}
+
+message MarginInnerProductParameter {
+  optional uint32 num_output = 1; // The number of outputs for the layer
+  enum MarginType {
+    SINGLE = 0;
+    DOUBLE = 1;
+    TRIPLE = 2;
+    QUADRUPLE = 3;
+  }
+  optional MarginType type = 2 [default = SINGLE]; 
+  optional FillerParameter weight_filler = 3; // The filler for the weight
+
+  // The first axis to be lumped into a single inner product computation;
+  // all preceding axes are retained in the output.
+  // May be negative to index from the end (e.g., -1 for the last axis).
+  optional int32 axis = 4 [default = 1];
+  optional float base = 5 [default = 1];
+  optional float gamma = 6 [default = 0];
+  optional float power = 7 [default = 1];
+  optional int32 iteration = 8 [default = 0];
+  optional float lambda_min = 9 [default = 0];
+}
+
+message AdditiveMarginInnerProductParameter {
+  optional uint32 num_output = 1; // The number of outputs for the layer
+  optional FillerParameter weight_filler = 2; // The filler for the weight
+  optional float m = 3 [default = 0.35];
+  optional int32 axis = 4 [default = 1];
+}
+
+message DeformableConvolutionParameter {
+  optional uint32 num_output = 1; 
+  optional bool bias_term = 2 [default = true]; 
+  repeated uint32 pad = 3; // The padding size; defaults to 0
+  repeated uint32 kernel_size = 4; // The kernel size
+  repeated uint32 stride = 6; // The stride; defaults to 1
+  repeated uint32 dilation = 18; // The dilation; defaults to 1
+  optional uint32 pad_h = 9 [default = 0]; // The padding height (2D only)
+  optional uint32 pad_w = 10 [default = 0]; // The padding width (2D only)
+  optional uint32 kernel_h = 11; // The kernel height (2D only)
+  optional uint32 kernel_w = 12; // The kernel width (2D only)
+  optional uint32 stride_h = 13; // The stride height (2D only)
+  optional uint32 stride_w = 14; // The stride width (2D only)
+  optional uint32 group = 5 [default = 4]; 
+  optional uint32 deformable_group = 25 [default = 4]; 
+  optional FillerParameter weight_filler = 7; // The filler for the weight
+  optional FillerParameter bias_filler = 8; // The filler for the bias
+  enum Engine {
+    DEFAULT = 0;
+    CAFFE = 1;
+    CUDNN = 2;
+  }
+  optional Engine engine = 15 [default = DEFAULT];
+  optional int32 axis = 16 [default = 1];
+  optional bool force_nd_im2col = 17 [default = false];
+}
+
+message LabelSpecificAddParameter {
+  optional float bias = 1 [default = 0.0];
+  optional bool transform_test = 2 [default = false];
+}
+
+message ChannelScaleParameter{
+  optional bool do_forward = 1 [default = true];
+  optional bool do_backward_feature = 2 [default = true];
+  optional bool do_backward_scale = 3 [default = true];
+  optional bool global_scale = 4 [default = false];
+  optional float max_global_scale = 5 [default = 1000.0];
+  optional float min_global_scale = 6 [default = 0.0];
+  optional float init_global_scale = 7 [default = 1.0];
+}
+
+message CosinAddmParameter {
+  optional float m = 1 [default = 0.5];
+  optional bool transform_test = 2 [default = false];
+}
+message CosinMulmParameter {
+  optional float m = 1 [default = 4];
+  optional bool transform_test = 2 [default = false];
+}
+
+message CoupledClusterLossParameter {
+  optional float margin = 1 [default = 1];
+  optional int32 group_size = 2 [default = 3];
+  optional float scale = 3 [default = 1];
+  optional bool log_flag = 4 [default = false];
+  // optional int32 pos_num = 3 [default = 1];
+  // optional int32 neg_num = 4 [default = 1];
+}
+
+message TripletLossParameter {
+  optional float margin = 1 [default = 1];
+  optional int32 group_size = 2 [default = 3];
+  optional float scale = 3 [default = 1];
+  // optional int32 pos_num = 3 [default = 1];
+  // optional int32 neg_num = 4 [default = 1];
+}
+
+message GeneralTripletParameter {
+  optional float margin = 1 [default = 0.2];
+  optional bool add_center_loss = 2 [default = true];
+  optional bool hardest_only = 3 [default = false];
+  optional bool positive_first = 4 [default = false];
+  optional float positive_upper_bound = 5 [default = 1.0];
+  optional float positive_weight = 6 [default = 1.0];
+  optional float negative_weight = 7 [default = 1.0];
+}
+
+message ROIAlignParameter {
+  optional uint32 pooled_h = 1 [default = 0]; // The pooled output height
+  optional uint32 pooled_w = 2 [default = 0]; // The pooled output width
+  optional float spatial_scale = 3 [default = 1];
+}
+

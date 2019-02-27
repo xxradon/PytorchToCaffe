@@ -103,54 +103,82 @@ class Activation(Base):
 
 
 class Sliding(Base):
-    def __init__(self,input,kernel_size,num_out,stride=1,pad=0,name='sliding',ceil=False):
-        # input is the instance of blob.Blob with shape (h,w,c) or (batch,h,w,c)
+    def __init__(self,input,kernel_size,num_out,stride=1,pad=0,name='sliding',ceil=False,transpose=False):
+        # input is the instance of blob.Blob with shape (c,h,w) or (batch,c,h,w)
         super(Sliding,self).__init__(input,name=name)
-        if self.input.dim!=4:
-            raise ValueError('Sliding must have a input with (batch,w,h,c)')
+        if self.input.dim==4:
+            conv_dims=2
+        elif self.input.dim==5:
+            conv_dims=3
+            self.input_t=self.input.t
+        else:
+            raise ValueError('Sliding must have a input with 2D Map(batch,c,w,h) or 3D Map(batch,c,d,w,h)')
         self.input_w = self.input.w
         self.input_h = self.input.h
         self.batch_size = self.input.batch_size
         self.in_channel = self.input.c
 
-        if type(kernel_size)==int:
-            self.kernel_size=[kernel_size,kernel_size]
+        if type(kernel_size) == int:
+            self.kernel_size = [kernel_size] * conv_dims
         else:
-            self.kernel_size=[i for i in kernel_size]
-            if len(self.kernel_size)==1:self.kernel_size*=2
-        if type(stride)==int:
-            self.stride=[stride,stride]
+            assert len(kernel_size)==conv_dims
+            self.kernel_size = [i for i in kernel_size]
+        if type(stride) == int:
+            self.stride = [stride] * conv_dims
         else:
-            self.stride=[i for i in stride]
-            if len(self.stride)==1:self.stride*=2
-            elif len(self.stride)==0:self.stride=[1,1]
-            elif len(self.stride)>2:raise AttributeError
-        if type(pad)==int:
-            self.pad=[pad,pad]
+            self.stride = [i for i in stride]
+            if len(self.stride) == 1:
+                self.stride = [self.stride[0]] * conv_dims
+            elif len(self.stride) == 0:
+                self.stride = [1] * conv_dims
+        if type(pad) == int:
+            self.pad = [pad] * conv_dims
         else:
-            self.pad=[i for i in pad]
-            if len(self.pad)==1:self.pad*=2
-            elif len(self.pad)==0:self.pad=[0,0]
-            elif len(self.pad)>2:raise AttributeError
-        self.num_out=num_out
-        self.layer_info='kernel=%dx%d,stride=%dx%d,pad=%dx%d'%(self.kernel_size[0],self.kernel_size[1],
-                                                            self.stride[0],self.stride[1],self.pad[0],self.pad[1])
-        #calc out
+            self.pad = [i for i in pad]
+            if len(self.pad) == 1:
+                self.pad *= conv_dims
+            elif len(self.pad) == 0:
+                self.pad = [0] * conv_dims
+        self.num_out = num_out
+        self.layer_info ='kernel=%s,stride=%s,pad=%s'%('x'.join([str(_) for _ in self.kernel_size]),
+                                                       'x'.join([str(_) for _ in self.stride]),
+                                                       'x'.join([str(_) for _ in self.pad]))
+        if transpose:
+            self.layer_info += ',transpose'
+        # calc out
 
-        if not ceil:
-            out_w=np.floor(float(self.input_w +self.pad[0]*2-self.kernel_size[0])/self.stride[0])+1
-            out_h= np.floor(float(self.input_h + self.pad[1] * 2 - self.kernel_size[1]) / self.stride[1]) + 1
-        else:
-            out_w = np.ceil(float(self.input_w + self.pad[0] * 2 - self.kernel_size[0]) / self.stride[0]) + 1
-            out_h = np.ceil(float(self.input_h + self.pad[1] * 2 - self.kernel_size[1]) / self.stride[1]) + 1
-        self.out=Blob([self.batch_size,out_w,out_h,num_out],self)
+        outs=[]
+
+        for i in range(self.input.dim-2):
+            if not transpose:
+                if not ceil:
+                    outs.append(np.floor(float(self.input[2+i] + self.pad[i] * 2 - self.kernel_size[i]) / self.stride[i]) + 1)
+                else:
+                    outs.append(np.ceil(float(self.input[2+i] + self.pad[i] * 2 - self.kernel_size[i]) / self.stride[i]) + 1)
+            else:
+                # transpose
+                outs.append((self.input[2+i] - 1) * self.stride[i] - 2 * self.pad[i] + self.kernel_size[i])
+        #     if not ceil:
+        #         out_h = np.floor(float(self.input_w + self.pad[0] * 2 - self.kernel_size[0]) / self.stride[0]) + 1
+        #         out_w = np.floor(float(self.input_h + self.pad[1] * 2 - self.kernel_size[1]) / self.stride[1]) + 1
+        #         out_t = np.floor(float(self.input_t + self.pad[2] * 2 - self.kernel_size[2]) / self.stride[2]) + 1
+        #     else:
+        #         out_w = np.ceil(float(self.input_w + self.pad[0] * 2 - self.kernel_size[0]) / self.stride[0]) + 1
+        #         out_h = np.ceil(float(self.input_h + self.pad[1] * 2 - self.kernel_size[1]) / self.stride[1]) + 1
+        #         out_t = np.ceil(float(self.input_h + self.pad[1] * 2 - self.kernel_size[1]) / self.stride[1]) + 1
+        # else:
+        #     # transpose
+        #     out_w = (self.input_w - 1) * self.stride[0] - 2 * self.pad[0] + self.kernel_size[0]
+        #     out_h = (self.input_h - 1) * self.stride[1] - 2 * self.pad[1] + self.kernel_size[1]
+
+        self.out = Blob([self.batch_size, num_out, *outs], self)
 
 class Conv(Sliding):
     def __init__(self,input,kernel_size,num_out,stride=1,pad=0,
-                 activation='relu',name='conv',ceil=False,group_size=1):
+                 activation='relu',name='conv',ceil=False,group_size=1,transpose=False):
         if isinstance(input,Base):
             input=input()
-        Sliding.__init__(self,input,kernel_size,num_out,stride,pad,name=name,ceil=ceil)
+        Sliding.__init__(self,input,kernel_size,num_out,stride,pad,name=name,ceil=ceil,transpose=transpose)
         self.layer_info+=',num_out=%d'%(num_out)
         self.dot = np.prod(self.out.shape) * np.prod(self.kernel_size) * self.in_channel
         self.weight_size = np.prod(self.kernel_size) * num_out * self.in_channel

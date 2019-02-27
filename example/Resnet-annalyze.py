@@ -12,7 +12,6 @@ from torch.autograd import Variable
 import torch.nn as nn
 import sys
 sys.path.insert(0,'.')
-from option import args as configs
 from model import mgn
 from torchvision.models import resnet
 """

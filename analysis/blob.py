@@ -1,6 +1,7 @@
 import numpy as np
 
-# the blob with shape of (h,w,c) or (batch,h,w,c) for image
+# the blob with shape of (c,h,w) or (batch,c,h,w) for image
+# the blob with shape of (batch,c,t,h,w) for video
 class Blob():
     def __init__(self,shape,father=None):
         shape=[int(i) for i in shape]
@@ -18,14 +19,37 @@ class Blob():
 
     @property
     def w(self):
-        return self.shape[2]
+        if self.dim in [3,4,5]:
+            return self.shape[-1]
+        else:
+            raise NotImplementedError('Blob attribute w is only supported for 2D or 3D feature map')
+
     @property
     def h(self):
-        return self.shape[1]
+        if self.dim in [3,4,5]:
+            return self.shape[-2]
+        else:
+            raise NotImplementedError('Blob attribute h is only supported for 2D or 3D feature map')
+
+    @property
+    def t(self):
+        # time attribute
+        if self.dim in [5]:
+            # 3D feature map
+            return self.shape[3]
+        else:
+            raise NotImplementedError('Blob attribute t is only supported for 3D feature map')
 
     @property
     def c(self):
-        return self.shape[3]
+        if self.dim in [3,4]:
+            # 2D feature map
+            return self.shape[-3]
+        elif self.dim in [5]:
+            # 3D feature map
+            return self.shape[1]
+        else:
+            raise NotImplementedError('Blob attribute h is only supported for 2D or 3D feature map')
 
     @property
     def batch_size(self):
@@ -37,9 +61,12 @@ class Blob():
 
     def new(self,father):
         return Blob(self.shape,father)
+
     def __getitem__(self, key):
         return self.shape[key]
+
     def __str__(self):
         return str(self.shape)
+
     def flaten(self):
         return Blob([np.prod(self.shape)])

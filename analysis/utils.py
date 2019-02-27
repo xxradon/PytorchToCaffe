@@ -11,7 +11,7 @@ def get_human_readable(num):
         return '%.3e'%num
     return '%.3f'%num+units[idx]
 
-def save_csv(layers,csv_save_path,
+def save_csv(layers,csv_save_path='/tmp/analyse.csv',
              save_items=('name', 'layer_info', 'input', 'out', 'dot', 'add', 'compare','ops', 'weight_size','activation_size'),
              print_detail=True,human_readable=True):
     # layers = get_layer_blox_from_blobs(blobs)
@@ -33,13 +33,6 @@ def save_csv(layers,csv_save_path,
             except:pass
             print_line.append(s)
         print_list.append(print_line)
-
-    if csv_save_path!=None:
-        with open(csv_save_path,'w') as file:
-            writer=csv.writer(file)
-            writer.writerow(save_items)
-            for layer in print_list:
-                writer.writerow(layer)
     if print_detail:
         sum[0] = 'SUM'
         print_list.append(sum)
@@ -53,7 +46,13 @@ def save_csv(layers,csv_save_path,
                 else:
                     print_list.append('%s:%.3e'%(save_items[idx],item))
         print(print_list)
-    print('saved!')
+    if csv_save_path!=None:
+        with open(csv_save_path,'w') as file:
+            writer=csv.writer(file)
+            writer.writerow(save_items)
+            for layer in print_list:
+                writer.writerow(layer)
+        print('saved at {}!'.format(csv_save_path))
 
 def get_layer_blox_from_blobs(blobs):
     layers=[]

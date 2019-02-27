@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import traceback
 from Caffe import caffe_net
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -15,12 +16,25 @@ How to support a new layer type:
  <set layer parameters>
  [<layer.add_data(*datas)>]
  log.cnet.add_layer(layer)
+ 
+Please MUTE the inplace operations to avoid not find in graph
 """
 
 # TODO: support the inplace output of the layers
 
+class Blob_LOG():
+    def __init__(self):
+        self.data={}
+    def __setitem__(self, key, value):
+        self.data[key]=value
+    def __getitem__(self, key):
+        return self.data[key]
+    def __len__(self):
+        return len(self.data)
 
 NET_INITTED=False
+
+# 转换原理解析：通过记录
 class TransLog(object):
     def __init__(self):
         """
@@ -29,7 +43,7 @@ class TransLog(object):
         self.layers={}
         self.detail_layers={}  
         self.detail_blobs={}  
-        self._blobs={}
+        self._blobs=Blob_LOG()
         self._blobs_data=[]
         self.cnet=caffe_net.Caffemodel('')
         self.debug=True
@@ -55,7 +69,7 @@ class TransLog(object):
         rst=[]
         for blob in blobs:
             self._blobs_data.append(blob) # to block the memory address be rewrited
-            blob=int(id(blob))
+            blob_id=int(id(blob))
             if name not in self.detail_blobs.keys():
                 self.detail_blobs[name] =0
             self.detail_blobs[name] +=1           
@@ -64,8 +78,9 @@ class TransLog(object):
             else:
                 rst.append('{}'.format(name))
             if self.debug:
-                print("{}:{} was added to blobs".format(blob,rst[-1]))
-            self._blobs[blob]=rst[-1]
+                print("{}:{} was added to blobs".format(blob_id,rst[-1]))
+            print('Add blob {} : {}'.format(rst[-1].center(21),blob.size()))
+            self._blobs[blob_id]=rst[-1]
         return rst
     def blobs(self, var):
         var=id(var)
@@ -79,11 +94,28 @@ class TransLog(object):
 
 log=TransLog()
 
+layer_names={}
 def _conv2d(raw,input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
     x=raw(input,weight,bias,stride,padding,dilation,groups)
     name=log.add_layer(name='conv')
     log.add_blobs([x],name='conv_blob')
     layer=caffe_net.Layer_param(name=name, type='Convolution',
+                                bottom=[log.blobs(input)], top=[log.blobs(x)])
+    layer.conv_param(x.size()[1],weight.size()[2:],stride=_pair(stride),
+                     pad=_pair(padding),dilation=_pair(dilation),bias_term=bias is not None,groups=groups)
+    if bias is not None:
+        layer.add_data(weight.cpu().data.numpy(),bias.cpu().data.numpy())
+    else:
+        layer.param.convolution_param.bias_term=False
+        layer.add_data(weight.cpu().data.numpy())
+    log.cnet.add_layer(layer)
+    return x
+
+def _conv_transpose2d(raw,input, weight, bias=None, stride=1, padding=0, output_padding=0, groups=1, dilation=1):
+    x=raw(input, weight, bias, stride, padding, output_padding, groups, dilation)
+    name=log.add_layer(name='conv_transpose')
+    log.add_blobs([x],name='conv_transpose_blob')
+    layer=caffe_net.Layer_param(name=name, type='Deconvolution',
                                 bottom=[log.blobs(input)], top=[log.blobs(x)])
     layer.conv_param(x.size()[1],weight.size()[2:],stride=_pair(stride),
                      pad=_pair(padding),dilation=_pair(dilation),bias_term=bias is not None)
@@ -101,7 +133,7 @@ def _linear(raw,input, weight, bias=None):
     top_blobs=log.add_blobs([x],name='fc_blob')
     layer=caffe_net.Layer_param(name=layer_name,type='InnerProduct',
                                 bottom=[log.blobs(input)],top=top_blobs)
-    layer.fc_param(x.size()[1])
+    layer.fc_param(x.size()[1],has_bias=bias is not None)
     if bias is not None:
         layer.add_data(weight.cpu().data.numpy(),bias.cpu().data.numpy())
     else:
@@ -173,8 +205,8 @@ def _max(raw,*args):
         log.cnet.add_layer(layer)
     return x
 
-def _cat(raw,inputs, dim=0):
-    x=raw(inputs, dim)
+def _cat(raw,inputs, dimension=0):
+    x=raw(inputs, dimension)
     bottom_blobs=[]
     for input in inputs:
         bottom_blobs.append(log.blobs(input))
@@ -182,7 +214,7 @@ def _cat(raw,inputs, dim=0):
     top_blobs=log.add_blobs([x],name='cat_blob')
     layer=caffe_net.Layer_param(name=layer_name,type='Concat',
                                 bottom=bottom_blobs,top=top_blobs)
-    layer.param.concat_param.axis =dim
+    layer.param.concat_param.axis =dimension
     log.cnet.add_layer(layer)
     return x
 
@@ -221,6 +253,15 @@ def _threshold(raw,input, threshold, value, inplace=False):
     log.cnet.add_layer(layer)
     return x
 
+def _relu(raw, input, inplace=False):
+    # for threshold or prelu
+    x = raw(input, False)
+    name = log.add_layer(name='relu')
+    log.add_blobs([x], name='relu_blob')
+    layer = caffe_net.Layer_param(name=name, type='ReLU',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    log.cnet.add_layer(layer)
+    return x
 def _prelu(raw, input, weight):
     # for threshold or prelu
     x = raw(input, weight)
@@ -234,6 +275,26 @@ def _prelu(raw, input, weight):
         layer.add_data(weight.cpu().data.numpy()[0])
     else:
         layer.add_data(weight.cpu().data.numpy())
+    log.cnet.add_layer(layer)
+    return x
+
+def _leaky_relu(raw, input, negative_slope=0.01, inplace=False):
+    x = raw(input, negative_slope)
+    name = log.add_layer(name='leaky_relu')
+    log.add_blobs([x], name='leaky_relu_blob')
+    layer = caffe_net.Layer_param(name=name, type='ReLU',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    layer.param.relu_param.negative_slope=negative_slope
+    log.cnet.add_layer(layer)
+    return x
+
+def _tanh(raw, input):
+    # for tanh activation
+    x = raw(input)
+    name = log.add_layer(name='tanh')
+    log.add_blobs([x], name='tanh_blob')
+    layer = caffe_net.Layer_param(name=name, type='TanH',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
     log.cnet.add_layer(layer)
     return x
 
@@ -254,8 +315,7 @@ def _softmax(raw, input, dim=None, _stacklevel=3):
 def _batch_norm(raw,input, running_mean, running_var, weight=None, bias=None,
                training=False, momentum=0.1, eps=1e-5):
     # because the runing_mean and runing_var will be changed after the _batch_norm operation, we first save the parameters
-    running_mean_clone=running_mean.clone()
-    running_var_clone=running_var.clone()
+
     x = raw(input, running_mean, running_var, weight, bias,
                training, momentum, eps)
     bottom_blobs = [log.blobs(input)]
@@ -263,15 +323,79 @@ def _batch_norm(raw,input, running_mean, running_var, weight=None, bias=None,
     top_blobs = log.add_blobs([x], name='batch_norm_blob')
     layer1 = caffe_net.Layer_param(name=layer_name1, type='BatchNorm',
                                    bottom=bottom_blobs, top=top_blobs)
-    layer1.batch_norm_param(1, eps=eps)
+    if running_mean is None or running_var is None:
+        # not use global_stats, normalization is performed over the current mini-batch
+        layer1.batch_norm_param(use_global_stats=0,eps=eps)
+    else:
+        layer1.batch_norm_param(use_global_stats=1, eps=eps)
+        running_mean_clone = running_mean.clone()
+        running_var_clone = running_var.clone()
+        layer1.add_data(running_mean_clone.cpu().numpy(), running_var_clone.cpu().numpy(), np.array([1.0]))
+    log.cnet.add_layer(layer1)
+    if weight is not None and bias is not None:
+        layer_name2 = log.add_layer(name='bn_scale')
+        layer2 = caffe_net.Layer_param(name=layer_name2, type='Scale',
+                                       bottom=top_blobs, top=top_blobs)
+        layer2.param.scale_param.bias_term = True
+        layer2.add_data(weight.cpu().data.numpy(), bias.cpu().data.numpy())
+        log.cnet.add_layer(layer2)
+    return x
+
+def _instance_norm(raw, input, running_mean=None, running_var=None, weight=None,
+                  bias=None, use_input_stats=True, momentum=0.1, eps=1e-5):
+    # TODO: the batch size!=1 view operations
+    print("WARNING: The Instance Normalization transfers to Caffe using BatchNorm, so the batch size should be 1")
+    if running_var is not None or weight is not None:
+        # TODO: the affine=True or track_running_stats=True case
+        raise NotImplementedError("not implement the affine=True or track_running_stats=True case InstanceNorm")
+    x= torch.batch_norm(
+        input, weight, bias, running_mean, running_var,
+        use_input_stats, momentum, eps,torch.backends.cudnn.enabled)
+    bottom_blobs = [log.blobs(input)]
+    layer_name1 = log.add_layer(name='instance_norm')
+    top_blobs = log.add_blobs([x], name='instance_norm_blob')
+    layer1 = caffe_net.Layer_param(name=layer_name1, type='BatchNorm',
+                                   bottom=bottom_blobs, top=top_blobs)
+    if running_mean is None or running_var is None:
+        # not use global_stats, normalization is performed over the current mini-batch
+        layer1.batch_norm_param(use_global_stats=0,eps=eps)
+        running_mean=torch.zeros(input.size()[1])
+        running_var=torch.ones(input.size()[1])
+    else:
+        layer1.batch_norm_param(use_global_stats=1, eps=eps)
+    running_mean_clone = running_mean.clone()
+    running_var_clone = running_var.clone()
     layer1.add_data(running_mean_clone.cpu().numpy(), running_var_clone.cpu().numpy(), np.array([1.0]))
     log.cnet.add_layer(layer1)
-    layer_name2 = log.add_layer(name='bn_scale')
-    layer2 = caffe_net.Layer_param(name=layer_name2, type='Scale',
-                                   bottom=top_blobs, top=top_blobs)#top_blobs
-    layer2.param.scale_param.bias_term = True
-    layer2.add_data(weight.cpu().data.numpy(), bias.cpu().data.numpy())
-    log.cnet.add_layer(layer2)
+    if weight is not None and bias is not None:
+        layer_name2 = log.add_layer(name='bn_scale')
+        layer2 = caffe_net.Layer_param(name=layer_name2, type='Scale',
+                                       bottom=top_blobs, top=top_blobs)
+        layer2.param.scale_param.bias_term = True
+        layer2.add_data(weight.cpu().data.numpy(), bias.cpu().data.numpy())
+        log.cnet.add_layer(layer2)
+    return x
+
+
+#upsample layer
+def _interpolate(raw, input,size=None, scale_factor=None, mode='nearest', align_corners=None):
+    # 定义的参数包括 scale,即输出与输入的尺寸比例,如 2;scale_h、scale_w,
+    # 同 scale,分别为 h、w 方向上的尺寸比例;pad_out_h、pad_out_w,仅在 scale 为 2 时
+    # 有用,对输出进行额外 padding 在 h、w 方向上的数值;upsample_h、upsample_w,输
+    # 出图像尺寸的数值。在 Upsample 的相关代码中,推荐仅仅使用 upsample_h、
+    # upsample_w 准确定义 Upsample 层的输出尺寸,其他所有的参数都不推荐继续使用。
+    # for nearest _interpolate
+    if mode != "nearest" or align_corners != None:
+        raise NotImplementedError("not implement F.interpolate totoaly")
+    x = raw(input,size , scale_factor ,mode)
+
+    layer_name = log.add_layer(name='upsample')
+    top_blobs = log.add_blobs([x], name='upsample_blob'.format(type))
+    layer = caffe_net.Layer_param(name=layer_name, type='Upsample',
+                                  bottom=[log.blobs(input)], top=top_blobs)
+
+    layer.upsample_param(size =(input.size(2),input.size(3)), scale_factor= scale_factor)
+    log.cnet.add_layer(layer)
     return x
 
 # ----- for Variable operations --------
@@ -288,6 +412,25 @@ def _view(input, *args):
     dims=list(args)
     dims[0]=0 # the first dim should be batch_size
     layer.param.reshape_param.shape.CopyFrom(caffe_net.pb.BlobShape(dim=dims))
+    log.cnet.add_layer(layer)
+    return x
+
+def _mean(input, *args,**kwargs):
+    x=raw_mean(input, *args,**kwargs)
+    if not NET_INITTED:
+        return x
+    layer_name=log.add_layer(name='mean')
+    top_blobs=log.add_blobs([x],name='mean_blob')
+    layer=caffe_net.Layer_param(name=layer_name,type='Reduction',
+                                bottom=[log.blobs(input)],top=top_blobs)
+    if len(args)==1:
+        dim=args[0]
+    elif 'dim' in kwargs:
+        dim=kwargs['dim']
+    else:
+        raise NotImplementedError('mean operation must specify a dim')
+    layer.param.reduction_param.operation=4
+    layer.param.reduction_param.axis=dim
     log.cnet.add_layer(layer)
     return x
 
@@ -368,6 +511,10 @@ def _imul(input, *args):
     log.cnet.add_layer(layer)
     return x
 
+
+
+
+# 核心组件，通过该类，实现对torch的function中的operators的输入，输出以及参数的读取
 class Rp(object):
     def __init__(self,raw,replace,**kwargs):
         # replace the raw function to replace function
@@ -377,21 +524,35 @@ class Rp(object):
     def __call__(self,*args,**kwargs):
         if not NET_INITTED:
             return self.raw(*args,**kwargs)
+        for stack in traceback.walk_stack(None):
+            if 'self' in stack[0].f_locals:
+                layer=stack[0].f_locals['self']
+                if layer in layer_names:
+                    log.pytorch_layer_name=layer_names[layer]
+                    print(layer_names[layer])
+                    break
         out=self.obj(self.raw,*args,**kwargs)
         # if isinstance(out,Variable):
         #     out=[out]
         return out
 
 
+
+
 F.conv2d=Rp(F.conv2d,_conv2d)
 F.linear=Rp(F.linear,_linear)
+F.relu=Rp(F.relu,_relu)
+F.leaky_relu=Rp(F.leaky_relu,_leaky_relu)
 F.max_pool2d=Rp(F.max_pool2d,_max_pool2d)
 F.avg_pool2d=Rp(F.avg_pool2d,_avg_pool2d)
 F.dropout=Rp(F.dropout,_dropout)
 F.threshold=Rp(F.threshold,_threshold)
 F.prelu=Rp(F.prelu,_prelu)
 F.batch_norm=Rp(F.batch_norm,_batch_norm)
+F.instance_norm=Rp(F.instance_norm,_instance_norm)
 F.softmax=Rp(F.softmax,_softmax)
+F.conv_transpose2d=Rp(F.conv_transpose2d,_conv_transpose2d)
+F.interpolate = Rp(F.interpolate,_interpolate)
 
 torch.split=Rp(torch.split,_split)
 torch.max=Rp(torch.max,_max)
@@ -402,6 +563,8 @@ torch.cat=Rp(torch.cat,_cat)
 try:
     raw_view=Variable.view
     Variable.view=_view
+    raw_mean=Variable.mean
+    Variable.mean=_mean
     raw__add__=Variable.__add__
     Variable.__add__=_add
     raw__iadd__=Variable.__iadd__
@@ -415,10 +578,12 @@ try:
     raw__imul__ = Variable.__imul__
     Variable.__imul__ = _imul
 except:
-    # for new version 0.4.0
+    # for new version 0.4.0 and later version
     for t in [torch.Tensor]:
         raw_view = t.view
         t.view = _view
+        raw_mean = t.mean
+        t.mean = _mean
         raw__add__ = t.__add__
         t.__add__ = _add
         raw__iadd__ = t.__iadd__
@@ -433,7 +598,7 @@ except:
         t.__imul__ = _imul
 
 
-def trans_net(net,input_var,name='NoNamePytorchModel'):
+def trans_net(net,input_var,name='TransferedPytorchModel'):
     print('Starting Transform, This will take a while')
     log.init([input_var])
     log.cnet.net.name=name
@@ -441,6 +606,9 @@ def trans_net(net,input_var,name='NoNamePytorchModel'):
     log.cnet.net.input_dim.extend(input_var.size())
     global NET_INITTED
     NET_INITTED=True
+    for name,layer in net.named_modules():
+        layer_names[layer]=name
+    print("torch ops name:", layer_names)
     out = net.forward(input_var)
     print('Transform Completed')
 
