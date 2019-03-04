@@ -73,13 +73,14 @@ dropout -> Dropout,
  softmax -> Softmax, 
  batch_norm -> BatchNorm,Scale, 
  instance_norm -> BatchNorm,Scale,
+ _interpolate  ->  Upsample
  
 - Supporting operations: torch.split, torch.max, torch.cat
 - Supporting tensor Variable operations: var.view, + (add), += (iadd), -(sub), -=(isub)
  \* (mul) *= (imul)
 
 Need to be added for caffe in the future:
-- Upsample,Normalize,DepthwiseConv
+- Normalize,DepthwiseConv
 
 The supported above can transfer many kinds of nets, 
 such as AlexNet(tested), VGG(tested), ResNet(fixed the bug in origin repo which mainly caused by ReLu layer function.), Inception_V3(tested).
