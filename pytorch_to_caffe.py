@@ -118,7 +118,7 @@ def _conv_transpose2d(raw,input, weight, bias=None, stride=1, padding=0, output_
     layer=caffe_net.Layer_param(name=name, type='Deconvolution',
                                 bottom=[log.blobs(input)], top=[log.blobs(x)])
     layer.conv_param(x.size()[1],weight.size()[2:],stride=_pair(stride),
-                     pad=_pair(padding),dilation=_pair(dilation),bias_term=bias is not None)
+                     pad=_pair(padding),dilation=_pair(dilation),bias_term=bias is not None, groups = groups)
     if bias is not None:
         layer.add_data(weight.cpu().data.numpy(),bias.cpu().data.numpy())
     else:
@@ -164,7 +164,7 @@ def _pool(type,raw,input,x,kernel_size,stride,padding,ceil_mode):
     # TODO w,h different kernel, stride and padding
     # processing ceil mode
     layer.pool_param(kernel_size=kernel_size, stride=kernel_size if stride is None else stride,
-                     pad=padding, type=type.upper())
+                     pad=padding, type=type.upper() , ceil_mode = ceil_mode)
     log.cnet.add_layer(layer)
     if ceil_mode==False and stride is not None:
         oheight = (input.size()[2] - _pair(kernel_size)[0] + 2 * _pair(padding)[0]) % (_pair(stride)[0])
