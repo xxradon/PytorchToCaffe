@@ -398,6 +398,21 @@ def _interpolate(raw, input,size=None, scale_factor=None, mode='nearest', align_
     log.cnet.add_layer(layer)
     return x
 
+
+#upsample layer
+def _sigmoid(raw, input):
+    # Applies the element-wise function:
+    # 
+    # Sigmoid(x)= 1/(1+exp(−x)）
+    # 
+    # ​	
+    x = raw(input)
+    name = log.add_layer(name='sigmoid')
+    log.add_blobs([x], name='sigmoid_blob')
+    layer = caffe_net.Layer_param(name=name, type='Sigmoid',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    log.cnet.add_layer(layer)
+
 # ----- for Variable operations --------
 
 def _view(input, *args):
@@ -553,6 +568,8 @@ F.instance_norm=Rp(F.instance_norm,_instance_norm)
 F.softmax=Rp(F.softmax,_softmax)
 F.conv_transpose2d=Rp(F.conv_transpose2d,_conv_transpose2d)
 F.interpolate = Rp(F.interpolate,_interpolate)
+F.sigmoid = Rp(F.sigmoid,_sigmoid)
+
 
 torch.split=Rp(torch.split,_split)
 torch.max=Rp(torch.max,_max)

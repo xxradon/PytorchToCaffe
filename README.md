@@ -75,7 +75,7 @@ dropout -> Dropout,
  instance_norm -> BatchNorm,Scale,
  _interpolate  ->  Upsample
  
-- Supporting operations: torch.split, torch.max, torch.cat
+- Supporting operations: torch.split, torch.max, torch.cat ,torch.sigmoid
 - Supporting tensor Variable operations: var.view, + (add), += (iadd), -(sub), -=(isub)
  \* (mul) *= (imul)
 
