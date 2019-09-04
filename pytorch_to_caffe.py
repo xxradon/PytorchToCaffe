@@ -399,7 +399,7 @@ def _interpolate(raw, input,size=None, scale_factor=None, mode='nearest', align_
     return x
 
 
-#upsample layer
+#sigmid layer
 def _sigmoid(raw, input):
     # Applies the element-wise function:
     # 
@@ -410,6 +410,20 @@ def _sigmoid(raw, input):
     name = log.add_layer(name='sigmoid')
     log.add_blobs([x], name='sigmoid_blob')
     layer = caffe_net.Layer_param(name=name, type='Sigmoid',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    log.cnet.add_layer(layer)
+
+#tanh layer
+def _tanh(raw, input):
+    # Applies the element-wise function:
+    # 
+    # torch.nn.Tanh
+    # 
+    # ​	
+    x = raw(input)
+    name = log.add_layer(name='tanh')
+    log.add_blobs([x], name='tanh_blob')
+    layer = caffe_net.Layer_param(name=name, type='TanH',
                                   bottom=[log.blobs(input)], top=[log.blobs(x)])
     log.cnet.add_layer(layer)
 
@@ -569,6 +583,7 @@ F.softmax=Rp(F.softmax,_softmax)
 F.conv_transpose2d=Rp(F.conv_transpose2d,_conv_transpose2d)
 F.interpolate = Rp(F.interpolate,_interpolate)
 F.sigmoid = Rp(F.sigmoid,_sigmoid)
+F.tanh = Rp(F.tanh,_tanh)
 
 
 torch.split=Rp(torch.split,_split)
