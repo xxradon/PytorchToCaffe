@@ -73,6 +73,41 @@ class Layer_param():
             conv_param.group=groups
         self.param.convolution_param.CopyFrom(conv_param)
 
+    def norm_param(self, eps):
+        """
+        add a conv_param layer if you spec the layer type "Convolution"
+        Args:
+            num_output: a int
+            kernel_size: int list
+            stride: a int list
+            weight_filler_type: the weight filer type
+            bias_filler_type: the bias filler type
+        Returns:
+        """
+        l2norm_param = pb.NormalizeParameter()
+        l2norm_param.across_spatial = False
+        l2norm_param.channel_shared = False
+        l2norm_param.eps = eps
+        self.param.norm_param.CopyFrom(l2norm_param)
+
+
+    def permute_param(self, order1, order2, order3, order4):
+        """
+        add a conv_param layer if you spec the layer type "Convolution"
+        Args:
+            num_output: a int
+            kernel_size: int list
+            stride: a int list
+            weight_filler_type: the weight filer type
+            bias_filler_type: the bias filler type
+        Returns:
+        """
+        permute_param = pb.PermuteParameter()
+        permute_param.order.extend([order1, order2, order3, order4])
+
+        self.param.permute_param.CopyFrom(permute_param)
+
+
     def pool_param(self,type='MAX',kernel_size=2,stride=2,pad=None, ceil_mode = True):
         pool_param=pb.PoolingParameter()
         pool_param.pool=pool_param.PoolMethod.Value(type)

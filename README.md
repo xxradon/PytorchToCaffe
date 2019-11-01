@@ -9,8 +9,10 @@
 
 1. Converting a pytorch model to caffe model.
 2. Some convenient tools of manipulate caffemodel and prototxt quickly(like get or set weights of layers).
-3. Support pytorch version >= 0.2.(Have tested on 0.3,0.3.1, 0.4, 0.4.1 ,1.0,1.1,1.2)
+3. Support pytorch version >= 0.2.(Have tested on 0.3,0.3.1, 0.4, 0.4.1 ,1.0, 1.2)
 4. Analysing a model, get the operations number(ops) in every layers.
+
+Noting: pytorch version 1.1 is not supported now
 
 ### requirements
 
@@ -74,13 +76,19 @@ dropout -> Dropout,
  batch_norm -> BatchNorm,Scale, 
  instance_norm -> BatchNorm,Scale,
  _interpolate  ->  Upsample
+ _hardtanh -> ReLU6
+ _permute -> Permute
+ _l2Norm -> Normalize
  
-- Supporting operations: torch.split, torch.max, torch.cat ,torch.sigmoid
+ 
+- Supporting operations: torch.split, torch.max, torch.cat ,torch.sigmoid, torch.div
 - Supporting tensor Variable operations: var.view, + (add), += (iadd), -(sub), -=(isub)
- \* (mul) *= (imul)
+ \* (mul) *= (imul), torch.Tensor.contiguous(_contiguous), torch.Tensor.pow(_pow), 
+ \* torch.Tensor.sum(_sum), torch.Tensor.sqrt(_sqrt), torch.Tensor.unsqueeze(_unsqueeze)
+ \* torch.Tensor.expand_as(_expand_as),
 
 Need to be added for caffe in the future:
-- Normalize,DepthwiseConv
+- DepthwiseConv
 
 The supported above can transfer many kinds of nets, 
 such as AlexNet(tested), VGG(tested), ResNet(fixed the bug in origin repo which mainly caused by ReLu layer function.), Inception_V3(tested).

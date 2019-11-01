@@ -18,6 +18,8 @@ How to support a new layer type:
  log.cnet.add_layer(layer)
  
 Please MUTE the inplace operations to avoid not find in graph
+
+注意：只有torch.nn.functional中的函数才能转换为caffe中的层
 """
 
 # TODO: support the inplace output of the layers
@@ -79,13 +81,13 @@ class TransLog(object):
                 rst.append('{}'.format(name))
             if self.debug:
                 print("{}:{} was added to blobs".format(blob_id,rst[-1]))
-            print('Add blob {} : {}'.format(rst[-1].center(21),blob.size()))
+            # print('Add blob {} : {}'.format(rst[-1].center(21),blob.size()))
             self._blobs[blob_id]=rst[-1]
         return rst
     def blobs(self, var):
         var=id(var)
-        if self.debug:
-            print("{}:{} getting".format(var, self._blobs[var]))
+        # if self.debug:
+        #     print("{}:{} getting".format(var, self._blobs[var]))
         try:
             return self._blobs[var]
         except:
@@ -96,6 +98,7 @@ log=TransLog()
 
 layer_names={}
 def _conv2d(raw,input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+    print('conv: ',log.blobs(input))
     x=raw(input,weight,bias,stride,padding,dilation,groups)
     name=log.add_layer(name='conv')
     log.add_blobs([x],name='conv_blob')
@@ -427,6 +430,45 @@ def _tanh(raw, input):
                                   bottom=[log.blobs(input)], top=[log.blobs(x)])
     log.cnet.add_layer(layer)
 
+def _hardtanh(raw, input, min_val, max_val, inplace):
+    # Applies the element-wise function:
+    #
+    # torch.nn.ReLu6
+    #
+    # ​
+    print('relu6: ', log.blobs(input))
+    x = raw(input, min_val, max_val)
+    name = log.add_layer(name='relu6')
+    log.add_blobs([x], name='relu6_blob')
+    layer = caffe_net.Layer_param(name=name, type='ReLU6',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    log.cnet.add_layer(layer)
+    return x
+
+#L2Norm layer
+def _l2Norm(raw, input, weight, eps):
+    # Applies the element-wise function:
+    #
+    # L2Norm in vgg_ssd
+    #
+    # ​
+    x = raw(input, weight, eps)
+    name = log.add_layer(name='normalize')
+    log.add_blobs([x], name='normalize_blob')
+    layer = caffe_net.Layer_param(name=name, type='Normalize',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    layer.norm_param(eps)
+
+    layer.add_data(weight.cpu().data.numpy())
+    log.cnet.add_layer(layer)
+    return x
+
+def _div(raw,inputs, inputs2):
+    x=raw(inputs, inputs2)
+    log.add_blobs([x],name='div_blob')
+    return x
+
+
 # ----- for Variable operations --------
 
 def _view(input, *args):
@@ -469,10 +511,13 @@ def _add(input, *args):
         return x
     layer_name = log.add_layer(name='add')
     top_blobs = log.add_blobs([x], name='add_blob')
-    layer = caffe_net.Layer_param(name=layer_name, type='Eltwise',
-                                  bottom=[log.blobs(input),log.blobs(args[0])], top=top_blobs)
-    layer.param.eltwise_param.operation = 1 # sum is 1
-    log.cnet.add_layer(layer)
+    if log.blobs(args[0]) == None:
+        log.add_blobs([args[0]], name='extra_blob')
+    else:
+        layer = caffe_net.Layer_param(name=layer_name, type='Eltwise',
+                                      bottom=[log.blobs(input),log.blobs(args[0])], top=top_blobs)
+        layer.param.eltwise_param.operation = 1 # sum is 1
+        log.cnet.add_layer(layer)
     return x
 
 def _iadd(input, *args):
@@ -515,7 +560,7 @@ def _isub(input, *args):
     return x
 
 def _mul(input, *args):
-    x = raw__sub__(input, *args)
+    x = raw__mul__(input, *args)
     if not NET_INITTED:
         return x
     layer_name = log.add_layer(name='mul')
@@ -527,7 +572,7 @@ def _mul(input, *args):
     return x
 
 def _imul(input, *args):
-    x = raw__isub__(input, *args)
+    x = raw__imul__(input, *args)
     if not NET_INITTED:
         return x
     x = x.clone()
@@ -538,6 +583,60 @@ def _imul(input, *args):
     layer.param.eltwise_param.operation = 0  # product is 1
     layer.param.eltwise_param.coeff.extend([1., -1.])
     log.cnet.add_layer(layer)
+    return x
+
+
+#Permute layer
+def _permute(input, *args):
+    x = raw__permute__(input, *args)
+    name = log.add_layer(name='permute')
+    log.add_blobs([x], name='permute_blob')
+    layer = caffe_net.Layer_param(name=name, type='Permute',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    order1 = args[0]
+    order2 = args[1]
+    order3 = args[2]
+    order4 = args[3]
+
+    layer.permute_param(order1, order2, order3, order4)
+    log.cnet.add_layer(layer)
+    return x
+
+#contiguous
+def _contiguous(input, *args):
+    x = raw__contiguous__(input, *args)
+    # name = log.add_layer(name='contiguous')
+    log.add_blobs([x], name='contiguous_blob')
+    return x
+
+#pow
+def _pow(input, *args):
+    x = raw__pow__(input, *args)
+    log.add_blobs([x], name='pow_blob')
+    return x
+
+#sum
+def _sum(input, *args):
+    x = raw__sum__(input, *args)
+    log.add_blobs([x], name='sum_blob')
+    return x
+
+# sqrt
+def _sqrt(input, *args):
+    x = raw__sqrt__(input, *args)
+    log.add_blobs([x], name='sqrt_blob')
+    return x
+
+# unsqueeze
+def _unsqueeze(input, *args):
+    x = raw__unsqueeze__(input, *args)
+    log.add_blobs([x], name='unsqueeze_blob')
+    return x
+
+# sqrt
+def _expand_as(input, *args):
+    x = raw__expand_as__(input, *args)
+    log.add_blobs([x], name='expand_as_blob')
     return x
 
 
@@ -584,12 +683,14 @@ F.conv_transpose2d=Rp(F.conv_transpose2d,_conv_transpose2d)
 F.interpolate = Rp(F.interpolate,_interpolate)
 F.sigmoid = Rp(F.sigmoid,_sigmoid)
 F.tanh = Rp(F.tanh,_tanh)
-
+F.tanh = Rp(F.tanh,_tanh)
+F.hardtanh = Rp(F.hardtanh,_hardtanh)
+# F.l2norm = Rp(F.l2norm,_l2Norm)
 
 torch.split=Rp(torch.split,_split)
 torch.max=Rp(torch.max,_max)
 torch.cat=Rp(torch.cat,_cat)
-
+torch.div=Rp(torch.div,_div)
 
 # TODO: other types of the view function
 try:
@@ -628,6 +729,20 @@ except:
         t.__mul__=_mul
         raw__imul__ = t.__imul__
         t.__imul__ = _imul
+        raw__permute__ = t.permute
+        t.permute = _permute
+        raw__contiguous__ = t.contiguous
+        t.contiguous = _contiguous
+        raw__pow__ = t.pow
+        t.pow = _pow
+        raw__sum__ = t.sum
+        t.sum = _sum
+        raw__sqrt__ = t.sqrt
+        t.sqrt = _sqrt
+        raw__unsqueeze__ = t.unsqueeze
+        t.unsqueeze = _unsqueeze
+        raw__expand_as__ = t.expand_as
+        t.expand_as = _expand_as
 
 
 def trans_net(net,input_var,name='TransferedPytorchModel'):
