@@ -605,8 +605,11 @@ def _permute(input, *args):
 #contiguous
 def _contiguous(input, *args):
     x = raw__contiguous__(input, *args)
-    # name = log.add_layer(name='contiguous')
+    name = log.add_layer(name='contiguous')
     log.add_blobs([x], name='contiguous_blob')
+    layer = caffe_net.Layer_param(name=name, type='NeedRemove',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+    log.cnet.add_layer(layer)
     return x
 
 #pow
@@ -760,6 +763,7 @@ def trans_net(net,input_var,name='TransferedPytorchModel'):
     print('Transform Completed')
 
 def save_prototxt(save_name):
+    log.cnet.remove_layer_by_type("NeedRemove")
     log.cnet.save_prototxt(save_name)
 
 def save_caffemodel(save_name):

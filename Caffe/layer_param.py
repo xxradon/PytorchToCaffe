@@ -71,6 +71,8 @@ class Layer_param():
             conv_param.dilation.extend(pair_reduce(dilation))
         if groups:
             conv_param.group=groups
+            if groups != 1:
+                conv_param.engine = 1
         self.param.convolution_param.CopyFrom(conv_param)
 
     def norm_param(self, eps):
