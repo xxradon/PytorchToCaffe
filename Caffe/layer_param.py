@@ -71,15 +71,57 @@ class Layer_param():
             conv_param.dilation.extend(pair_reduce(dilation))
         if groups:
             conv_param.group=groups
+            if groups != 1:
+                conv_param.engine = 1
         self.param.convolution_param.CopyFrom(conv_param)
 
-    def pool_param(self,type='MAX',kernel_size=2,stride=2,pad=None):
+    def norm_param(self, eps):
+        """
+        add a conv_param layer if you spec the layer type "Convolution"
+        Args:
+            num_output: a int
+            kernel_size: int list
+            stride: a int list
+            weight_filler_type: the weight filer type
+            bias_filler_type: the bias filler type
+        Returns:
+        """
+        l2norm_param = pb.NormalizeParameter()
+        l2norm_param.across_spatial = False
+        l2norm_param.channel_shared = False
+        l2norm_param.eps = eps
+        self.param.norm_param.CopyFrom(l2norm_param)
+
+
+    def permute_param(self, order1, order2, order3, order4):
+        """
+        add a conv_param layer if you spec the layer type "Convolution"
+        Args:
+            num_output: a int
+            kernel_size: int list
+            stride: a int list
+            weight_filler_type: the weight filer type
+            bias_filler_type: the bias filler type
+        Returns:
+        """
+        permute_param = pb.PermuteParameter()
+        permute_param.order.extend([order1, order2, order3, order4])
+
+        self.param.permute_param.CopyFrom(permute_param)
+
+
+    def pool_param(self,type='MAX',kernel_size=2,stride=2,pad=None, ceil_mode = True):
         pool_param=pb.PoolingParameter()
         pool_param.pool=pool_param.PoolMethod.Value(type)
         pool_param.kernel_size=pair_process(kernel_size)
         pool_param.stride=pair_process(stride)
+        pool_param.ceil_mode=ceil_mode
         if pad:
-            pool_param.pad=pad
+            if isinstance(pad,tuple):
+                pool_param.pad_h = pad[0]
+                pool_param.pad_w = pad[1]
+            else:
+                pool_param.pad=pad
         self.param.pooling_param.CopyFrom(pool_param)
 
     def batch_norm_param(self,use_global_stats=0,moving_average_fraction=None,eps=None):
