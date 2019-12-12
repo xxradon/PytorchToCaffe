@@ -46,7 +46,9 @@ class _Net(object):
         for i,layer in enumerate(self.net.layer):
             if layer.type == type_name:
                 # self.change_layer_bottom(layer.top,layer.bottom)
-                self.needChange[layer.top[0]]=layer.bottom[0]
+                s1 = "\"" + layer.top[0] + "\""
+                s2 = "\"" + layer.bottom[0] + "\""
+                self.needChange[s1]=s2
                 del self.net.layer[i]
         return
 
