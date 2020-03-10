@@ -192,12 +192,11 @@ def _avg_pool2d(raw,input, kernel_size, stride = None, padding = 0, ceil_mode = 
     return x
 
 def _adaptive_avg_pool2d(raw, input, output_size):
-    _output_size = _list_with_default(output_size, input.size())
-    x = raw(input, _output_size)
-    if isinstance(_output_size, int):
-        out_dim = _output_size
+    x = raw(input, output_size)
+    if isinstance(output_size, int):
+        out_dim = output_size
     else:
-        out_dim = _output_size[0]
+        out_dim = output_size[0]
     tmp = max(input.shape[2], input.shape[3])
     stride = tmp //out_dim
     kernel_size = tmp - (out_dim - 1) * stride
@@ -428,6 +427,7 @@ def _sigmoid(raw, input):
     layer = caffe_net.Layer_param(name=name, type='Sigmoid',
                                   bottom=[log.blobs(input)], top=[log.blobs(x)])
     log.cnet.add_layer(layer)
+    return x
 
 #tanh layer
 def _tanh(raw, input):
@@ -442,6 +442,7 @@ def _tanh(raw, input):
     layer = caffe_net.Layer_param(name=name, type='TanH',
                                   bottom=[log.blobs(input)], top=[log.blobs(x)])
     log.cnet.add_layer(layer)
+    return x
 
 def _hardtanh(raw, input, min_val, max_val, inplace):
     # Applies the element-wise function:
@@ -649,14 +650,25 @@ def _unsqueeze(input, *args):
     log.add_blobs([x], name='unsqueeze_blob')
     return x
 
-# sqrt
 def _expand_as(input, *args):
+    # only support expand A(1, 1, H, W) to B(1, C, H, W)
+    
     x = raw__expand_as__(input, *args)
+    layer_name = log.add_layer(name="expand_as", with_num=True)
     log.add_blobs([x], name='expand_as_blob')
+    layer = caffe_net.Layer_param(name=layer_name, type='Convolution',
+                                  bottom=[log.blobs(input)], top=[log.blobs(x)])
+
+    def constant_weight(shape):
+        weights = np.ones(shape, dtype='float32')
+        return weights
+
+    channels = args[0].size(1)
+    weight = constant_weight([channels, 1, 1, 1])
+    layer.conv_param(channels, kernel_size = 1, bias_term=False, weight_filler_type='xavier')
+    layer.add_data(weight)
+    log.cnet.add_layer(layer)
     return x
-
-
-
 
 # 核心组件，通过该类，实现对torch的function中的operators的输入，输出以及参数的读取
 class Rp(object):
@@ -681,14 +693,13 @@ class Rp(object):
         return out
 
 
-
-
 F.conv2d=Rp(F.conv2d,_conv2d)
 F.linear=Rp(F.linear,_linear)
 F.relu=Rp(F.relu,_relu)
 F.leaky_relu=Rp(F.leaky_relu,_leaky_relu)
 F.max_pool2d=Rp(F.max_pool2d,_max_pool2d)
 F.avg_pool2d=Rp(F.avg_pool2d,_avg_pool2d)
+F.adaptive_avg_pool2d = Rp(F.adaptive_avg_pool2d,_adaptive_avg_pool2d)
 F.dropout=Rp(F.dropout,_dropout)
 F.threshold=Rp(F.threshold,_threshold)
 F.prelu=Rp(F.prelu,_prelu)
