@@ -26,7 +26,12 @@ class Layer_param():
         self.param=pb.LayerParameter()
         self.name=self.param.name=name
         self.type=self.param.type=type
-
+        
+        if None in top:
+            top = list(filter(None, top))
+        if None in bottom:
+            bottom = list(filter(None, bottom))
+            
         self.top=self.param.top
         self.top.extend(top)
         self.bottom=self.param.bottom
