@@ -1657,7 +1657,7 @@ message PoolingParameter {
 
   ///////////////////////
   // Specify floor/ceil mode
-  optional bool ceil_mode = 13 [default = true];
+  optional string round_mode = 13 [default = 'CEIL'];
   ///////////////////////////////
 }
 

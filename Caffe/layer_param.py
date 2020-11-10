@@ -110,12 +110,12 @@ class Layer_param():
         self.param.permute_param.CopyFrom(permute_param)
 
 
-    def pool_param(self,type='MAX',kernel_size=2,stride=2,pad=None, ceil_mode = True):
+    def pool_param(self,type='MAX',kernel_size=2,stride=2,pad=None, round_mode = "CEIL"):
         pool_param=pb.PoolingParameter()
         pool_param.pool=pool_param.PoolMethod.Value(type)
         pool_param.kernel_size=pair_process(kernel_size)
         pool_param.stride=pair_process(stride)
-        pool_param.ceil_mode=ceil_mode
+        pool_param.round_mode=round_mode
         if pad:
             if isinstance(pad,tuple):
                 pool_param.pad_h = pad[0]

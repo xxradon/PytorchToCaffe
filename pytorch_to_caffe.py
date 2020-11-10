@@ -167,8 +167,12 @@ def _pool(type,raw,input,x,kernel_size,stride,padding,ceil_mode):
                                   bottom=[log.blobs(input)], top=top_blobs)
     # TODO w,h different kernel, stride and padding
     # processing ceil mode
+    if ceil_mode == True:
+        round_mode = "CEIL"
+    else:
+        round_mode = "FLOOR"
     layer.pool_param(kernel_size=kernel_size, stride=kernel_size if stride is None else stride,
-                     pad=padding, type=type.upper() , ceil_mode = ceil_mode)
+                     pad=padding, type=type.upper() , round_mode = round_mode)
     log.cnet.add_layer(layer)
     if ceil_mode==False and stride is not None:
         oheight = (input.size()[2] - _pair(kernel_size)[0] + 2 * _pair(padding)[0]) % (_pair(stride)[0])
