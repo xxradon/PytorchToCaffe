@@ -1657,7 +1657,11 @@ message PoolingParameter {
 
   ///////////////////////
   // Specify floor/ceil mode
-  optional string round_mode = 13 [default = 'CEIL'];
+  enum RoundMode {
+    CEIL = 0;
+    FLOOR = 1;
+  }
+  optional RoundMode round_mode = 13 [default = CEIL];
   ///////////////////////////////
 }
 
