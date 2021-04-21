@@ -58,7 +58,7 @@ class TransLog(object):
         self.add_blobs(inputs)
     def add_layer(self,name='layer'):
         name+='_'
-        name+='self.pytorch_layer_name'
+        name+=self.pytorch_layer_name
         if name in self.layers:
             return self.layers[name]
         if name not in self.detail_layers.keys():
@@ -72,7 +72,7 @@ class TransLog(object):
 
     def add_blobs(self, blobs,name='blob',with_num=False):
         name+='_'
-        name+='self.pytorch_layer_name'
+        name+=self.pytorch_layer_name
         rst=[]
         for blob in blobs:
             self._blobs_data.append(blob) # to block the memory address be rewrited
