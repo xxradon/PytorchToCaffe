@@ -49,6 +49,7 @@ class TransLog(object):
         self._blobs_data=[]
         self.cnet=caffe_net.Caffemodel('')
         self.debug=True
+        self.pytorch_layer_name=''
 
     def init(self,inputs):
         """
@@ -56,6 +57,8 @@ class TransLog(object):
         """
         self.add_blobs(inputs)
     def add_layer(self,name='layer'):
+        name+='_'
+        name+='self.pytorch_layer_name'
         if name in self.layers:
             return self.layers[name]
         if name not in self.detail_layers.keys():
@@ -67,7 +70,9 @@ class TransLog(object):
             print("{} was added to layers".format(self.layers[name]))
         return self.layers[name]
 
-    def add_blobs(self, blobs,name='blob',with_num=True):
+    def add_blobs(self, blobs,name='blob',with_num=False):
+        name+='_'
+        name+='self.pytorch_layer_name'
         rst=[]
         for blob in blobs:
             self._blobs_data.append(blob) # to block the memory address be rewrited
