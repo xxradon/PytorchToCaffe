@@ -607,12 +607,8 @@ def _permute(input, *args):
     log.add_blobs([x], name='permute_blob')
     layer = caffe_net.Layer_param(name=name, type='Permute',
                                   bottom=[log.blobs(input)], top=[log.blobs(x)])
-    order1 = args[0]
-    order2 = args[1]
-    order3 = args[2]
-    order4 = args[3]
 
-    layer.permute_param(order1, order2, order3, order4)
+    layer.permute_param(*args)
     log.cnet.add_layer(layer)
     return x
 
