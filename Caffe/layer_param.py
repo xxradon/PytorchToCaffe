@@ -93,7 +93,7 @@ class Layer_param():
         self.param.norm_param.CopyFrom(l2norm_param)
 
 
-    def permute_param(self, order1, order2, order3, order4):
+    def permute_param(self, order):
         """
         add a conv_param layer if you spec the layer type "Convolution"
         Args:
@@ -105,7 +105,7 @@ class Layer_param():
         Returns:
         """
         permute_param = pb.PermuteParameter()
-        permute_param.order.extend([order1, order2, order3, order4])
+        permute_param.order.extend(*order)
 
         self.param.permute_param.CopyFrom(permute_param)
 
