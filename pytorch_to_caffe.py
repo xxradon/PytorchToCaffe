@@ -44,9 +44,9 @@ class TransLog(object):
         """
         self.layers={}
         self.detail_layers={}  
-        self.detail_blobs={}  
-        self._blobs=Blob_LOG()
-        self._blobs_data=[]
+        self.detail_blobs={} #具体层名
+        self._blobs=Blob_LOG() #根据层的内存地址定位名字
+        self._blobs_data=[] # 层名
         self.cnet=caffe_net.Caffemodel('')
         self.debug=True
 
@@ -91,8 +91,9 @@ class TransLog(object):
         try:
             return self._blobs[var]
         except:
+            print(self._blobs.data.items())
             print("WARNING: CANNOT FOUND blob {}".format(var))
-            return None
+            #return None
 
 log=TransLog()
 
@@ -134,7 +135,7 @@ def _linear(raw,input, weight, bias=None):
     x=raw(input,weight,bias)
     layer_name=log.add_layer(name='fc')
     top_blobs=log.add_blobs([x],name='fc_blob')
-    layer=caffe_net.Layer_param(name=layer_name,type='InnerProduct',
+    layer=caffe_net.Layer_param(name=layer_name,type='InnerProduct', 
                                 bottom=[log.blobs(input)],top=top_blobs)
     layer.fc_param(x.size()[1],has_bias=bias is not None)
     if bias is not None:
@@ -166,8 +167,12 @@ def _pool(type,raw,input,x,kernel_size,stride,padding,ceil_mode):
                                   bottom=[log.blobs(input)], top=top_blobs)
     # TODO w,h different kernel, stride and padding
     # processing ceil mode
+    if ceil_mode == True:
+        round_mode = "CEIL"
+    else:
+        round_mode = "FLOOR"
     layer.pool_param(kernel_size=kernel_size, stride=kernel_size if stride is None else stride,
-                     pad=padding, type=type.upper() , ceil_mode = ceil_mode)
+                     pad=padding, type=type.upper() , round_mode = round_mode)
     log.cnet.add_layer(layer)
     if ceil_mode==False and stride is not None:
         oheight = (input.size()[2] - _pair(kernel_size)[0] + 2 * _pair(padding)[0]) % (_pair(stride)[0])
@@ -186,7 +191,7 @@ def _max_pool2d(raw,input, kernel_size, stride=None, padding=0, dilation=1,
     _pool('max',raw,input, x, kernel_size, stride, padding,ceil_mode)
     return x
 
-def _avg_pool2d(raw,input, kernel_size, stride = None, padding = 0, ceil_mode = False, count_include_pad = True):
+def _avg_pool2d(raw,input, kernel_size, stride = None, padding = 0, ceil_mode = False, count_include_pad = True, divisor_override=None):
     x = raw(input, kernel_size, stride, padding, ceil_mode, count_include_pad)
     _pool('ave',raw,input, x, kernel_size, stride, padding,ceil_mode)
     return x
@@ -491,7 +496,7 @@ def _view(input, *args):
         return x
     layer_name=log.add_layer(name='view')
     top_blobs=log.add_blobs([x],name='view_blob')
-    layer=caffe_net.Layer_param(name=layer_name,type='Reshape',
+    layer=caffe_net.Layer_param(name=layer_name,type='Reshape', 
                                 bottom=[log.blobs(input)],top=top_blobs)
     # TODO: reshpae added to nn_tools layer
     dims=list(args)
